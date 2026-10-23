@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth { scroll-behavior: auto !important; }
+  .lenis.lenis-stopped { overflow: hidden; }
+  body {
+    @apply bg-ivory text-ink font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4 { @apply text-forest; letter-spacing: -0.01em; }
+  :focus-visible { outline: 2px solid #B8944A; outline-offset: 2px; border-radius: 6px; }
+  [lang='ar'] { @apply font-arabic; }
+
+  /* Urdu: Naskh keeps dense UI text compact and legible on small screens;
+     Nastaliq is reserved for headings, where its traditional form reads well. */
+  html[lang='ur'] body { font-family: Manrope, 'Noto Naskh Arabic', system-ui, sans-serif; line-height: 1.75; }
+  html[lang='ur'] :is(h1, h2, .font-urdu-display) { font-family: Manrope, 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', serif; line-height: 2; letter-spacing: 0; }
+  html[lang='ur'] h3 { letter-spacing: 0; }
+  html[lang='ur'] .tracking-wider, html[lang='ur'] [class*='tracking-['] { letter-spacing: 0 !important; }
+  html[lang='ur'] .uppercase { text-transform: none; }
+  /* Values that must stay left-to-right inside Urdu pages */
+  [dir='rtl'] :is(input[type='email'], input[type='tel'], input[type='number'], input[type='date'], code, .ltr) { direction: ltr; }
+  [dir='rtl'] :is(input[type='email'], input[type='tel'], input[type='number']) { text-align: right; }
+  [dir='rtl'] select.field { background-position: left 12px center; }
+  /* Directional icons point the other way in right-to-left layouts */
+  [dir='rtl'] :is(.lucide-chevron-right, .lucide-chevron-left, .lucide-arrow-right, .lucide-arrow-left, .lucide-log-out) { transform: scaleX(-1); }
+  .align-page { text-align: left; }
+  [dir='rtl'] .align-page { text-align: right; }
+  input, select, textarea, button { font: inherit; }
+  /* Grid items default to min-width:auto, which lets charts and long names overflow on phones. */
+  .grid > * { min-width: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+@layer components {
+  .card { @apply bg-white rounded-2xl border border-line shadow-card; }
+  .card-pad { @apply p-4 sm:p-5; }
+  .label { @apply block text-[13px] font-semibold text-ink-soft mb-1.5; }
+  .field {
+    @apply w-full min-h-[44px] rounded-xl border border-line-strong bg-white px-3.5 py-2.5 text-[15px] text-ink
+      placeholder:text-ink-muted/70 transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none;
+  }
+  .field-error { @apply border-clay-500 focus:border-clay-500 focus:ring-clay-100; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap; }
+  .section-title { @apply text-[15px] font-bold text-forest; }
+  .muted { @apply text-ink-muted; }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+/* Subtle eight-point star geometry */
+.pattern-stars {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23B8944A' stroke-opacity='0.16' stroke-width='1'%3E%3Crect x='17' y='17' width='22' height='22'/%3E%3Crect x='17' y='17' width='22' height='22' transform='rotate(45 28 28)'/%3E%3Cpath d='M0 28h9M47 28h9M28 0v9M28 47v9'/%3E%3C/g%3E%3C/svg%3E");
+}
+.pattern-stars-light {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23D9BE85' stroke-opacity='0.22' stroke-width='1'%3E%3Crect x='17' y='17' width='22' height='22'/%3E%3Crect x='17' y='17' width='22' height='22' transform='rotate(45 28 28)'/%3E%3Cpath d='M0 28h9M47 28h9M28 0v9M28 47v9'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { scrollbar-width: none; }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Recharts tidy-up */
+.recharts-cartesian-axis-tick-value { font-size: 11px; fill: #6B726C; }
+.recharts-tooltip-wrapper { outline: none; }
+
+@media print {
+  @page { margin: 14mm; }
+  body { background: #fff !important; font-size: 12px; }
+  .no-print { display: none !important; }
+  .print-area { box-shadow: none !important; border: none !important; padding: 0 !important; }
+  .print-break { break-inside: avoid; }
+  main { padding: 0 !important; margin: 0 !important; }
+}
