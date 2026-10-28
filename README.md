@@ -11,18 +11,11 @@ npm run dev
 
 Open http://localhost:5173. `npm run build` produces a static `dist/` folder you can host anywhere (it needs SPA fallback to `index.html`).
 
-## Demo accounts
+## Sign-in (real backend)
 
-All passwords are `Demo123!`. You can also tap a role card on the login screen.
+Sign-in now goes through the backend in [Backend/](Backend/README.md): server sessions, role-based two-step verification (TOTP), password reset, invitations and lost-authenticator recovery. Start the backend as described in its README, then run `npm run dev` here. The dev accounts and their password are listed in [Backend/README.md](Backend/README.md#dev-accounts-from-npm-run-db-seed). Administrator, Principal and Mentor accounts set up an authenticator app at their first sign-in.
 
-| Role | Email | Who |
-|---|---|---|
-| Admin | admin@farooquia.demo | Maulana Shoaib Akhtar (Muhtamim) |
-| Mentor | mentor@farooquia.demo | Qari Abdul Rahman Siddiqui, Hifz Halqa A |
-| Student | student@farooquia.demo | Abdullah Khan (Hifz, Juz 4) |
-| Parent | parent@farooquia.demo | Javed Khan (Abdullah and Maryam) |
-
-**Demo Mode** (the gold pill in the header, or under "More" on a phone) lets you switch roles, follow a 10-step presentation guide, and reset the data.
+**Migration in progress:** sign-in, accounts (**Users & Access**) and **Account security** are server-backed. The other screens still show the fictional in-browser dataset described below. A signed-in user sees the demo record for their role until each module moves to the API. Principal and Warden see only their account page until their dashboards are built. The old Demo Mode role switcher has been removed.
 
 ## Suggested presentation flow
 
@@ -82,7 +75,7 @@ Animate UI is a copy-in shadcn/TypeScript component registry rather than an npm 
 
 This is a static frontend prototype.
 
-- Sign-in and role restrictions are simulated in the browser and are **not** security.
+- Sign-in, sessions and MFA are enforced by the backend. Restrictions on the screens that still use demo data are only checks in the browser until those modules move to the API.
 - Payments are a demonstration: no card or bank details are collected and no money moves.
 - Reminders and notifications are never transmitted by SMS, WhatsApp, email or push.
 - Uploaded library files last only for the current browser tab.

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, UserRound, CalendarCheck, BookOpenCheck, ClipboardList, Wallet, BellRing, BedDouble,
-  Library, BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus,
+  Library, BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck,
 } from 'lucide-react'
 
 // Role-aware navigation. These are UI restrictions for the demo only — a
@@ -29,6 +29,7 @@ export const NAV = {
         { to: '/reports', label: 'Reports', icon: BarChart3 },
         { to: '/progress-report', label: 'Progress Reports', icon: FileText },
         { to: '/audit', label: 'Activity Log', icon: History },
+        { to: '/admin/users', label: 'Users & Access', icon: ShieldCheck },
         { to: '/settings', label: 'Settings', icon: Settings },
       ] },
     ],
@@ -112,6 +113,7 @@ export const ROUTE_ROLES = {
   '/reports': ['admin'],
   '/audit': ['admin'],
   '/settings': ['admin'],
+  '/admin/users': ['admin'],
   '/journey': ['student', 'parent'],
   '/progress-report': ['admin', 'mentor', 'parent'],
 }
@@ -121,5 +123,5 @@ export const PAGE_TITLES = [
   ['/attendance', 'Attendance'], ['/sabaq/new', 'Record Sabaq'], ['/sabaq', 'Sabaq Records'], ['/journey', 'Learning'],
   ['/progress-report', 'Progress Report'], ['/exams', 'Examinations'], ['/report-card', 'Report Card'], ['/fees', 'Fees'],
   ['/reminders', 'Fee Reminders'], ['/hostel', 'Hostel'], ['/library', 'Library'], ['/reports', 'Reports'],
-  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'],
+  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/account/security', 'Account security'],
 ]

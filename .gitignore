@@ -3,3 +3,11 @@ dist
 .claude
 *.log
 .DS_Store
+
+# Backend: secrets, generated code, local database and uploaded files
+.env
+.env.*
+!.env.example
+Backend/src/generated/
+Backend/.local/
+Backend/storage/

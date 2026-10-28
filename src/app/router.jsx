@@ -28,11 +28,30 @@ import Audit from '../pages/admin/Audit'
 import Notifications from '../pages/shared/Notifications'
 import Settings from '../pages/admin/Settings'
 import { Forbidden, NotFound } from '../pages/shared/Fallbacks'
+import { useAuth } from '../context/AuthContext'
+import { AcceptInvite, ForgotPassword, MfaRecovery, ResetPassword } from '../pages/auth/TokenPages'
+import InterimHome from '../pages/auth/InterimHome'
+import Users from '../pages/admin/Users'
+import Security from '../pages/account/Security'
 
+const Loading = () => <div className="flex min-h-dvh items-center justify-center bg-ivory" aria-busy="true"><span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-r-transparent" /></div>
+
+// Every page below needs a full server session (password + MFA where required).
 function RequireAuth({ children }) {
-  const { state } = useStore()
+  const auth = useAuth()
   const location = useLocation()
-  if (!state.session) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (auth.status === 'loading') return <Loading />
+  if (auth.status !== 'full') return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!auth.hasDemoView) return <InterimHome />
+  if (!auth.demoReady) return <Loading />
+  return children
+}
+
+// Sign-in, password and invitation pages: leave them once fully signed in.
+function PublicOnly({ children }) {
+  const auth = useAuth()
+  if (auth.status === 'loading') return <Loading />
+  if (auth.status === 'full') return <Navigate to="/dashboard" replace />
   return children
 }
 
@@ -45,12 +64,15 @@ function Gate({ path, roles, children }) {
 
 export default function AppRoutes() {
   useSmoothScroll()
-  const { state } = useStore()
   const { lang } = useI18n()
   // Keyed by language so every page re-renders with the new strings and direction.
   return (
     <Routes key={lang}>
-      <Route path="/login" element={state.session ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+      <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
+      <Route path="/reset-password" element={<PublicOnly><ResetPassword /></PublicOnly>} />
+      <Route path="/accept-invite" element={<PublicOnly><AcceptInvite /></PublicOnly>} />
+      <Route path="/mfa-recovery" element={<PublicOnly><MfaRecovery /></PublicOnly>} />
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -76,6 +98,8 @@ export default function AppRoutes() {
         <Route path="/audit" element={<Gate path="/audit"><Audit /></Gate>} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Gate path="/settings"><Settings /></Gate>} />
+        <Route path="/admin/users" element={<Gate path="/admin/users"><Users /></Gate>} />
+        <Route path="/account/security" element={<Security />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

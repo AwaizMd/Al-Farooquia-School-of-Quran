@@ -1,0 +1,273 @@
+// Al Farooquia School of Quran: Madarsa Management System
+// Every schema change goes through `npm run db:migrate`; never edit applied migrations.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Institution
+// ---------------------------------------------------------------------------
+
+/// Single-institution deployment: exactly one row, id = 1.
+model InstitutionSettings {
+  id          Int      @id @default(1)
+  brandName   String
+  shortName   String
+  brandArabic String
+  tagline     String
+  address     String
+  phone       String
+  email       String
+  /// ISO 4217 code. Money is stored in minor units of this currency.
+  currency    String   @db.Char(3)
+  /// IANA timezone used to decide "today", due dates and job schedules.
+  timezone    String
+  /// 0 = Sunday … 6 = Saturday
+  weeklyOff   Int      @db.SmallInt
+  feeDueDay   Int      @db.SmallInt
+  updatedAt   DateTime @updatedAt
+
+  @@map("institution_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Identity, sessions and MFA
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  PRINCIPAL
+  MENTOR
+  STUDENT
+  PARENT
+  WARDEN
+}
+
+enum UserStatus {
+  /// Created by an administrator; no password set yet.
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  /// Lower-cased. Optional because young students may not have an email.
+  email              String?    @unique
+  emailVerifiedAt    DateTime?  @db.Timestamptz(3)
+  /// Lower-cased sign-in name for accounts without email (student admission number).
+  username           String?    @unique
+  displayName        String
+  phone              String?
+  /// Argon2id. Null until the invite is accepted.
+  passwordHash       String?
+  passwordChangedAt  DateTime?  @db.Timestamptz(3)
+  status             UserStatus @default(INVITED)
+  locale             String     @default("en")
+  /// Set by an MFA reset: sign-in is blocked until the recovery flow completes.
+  mfaRecoveryPending Boolean    @default(false)
+  createdAt          DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime   @updatedAt @db.Timestamptz(3)
+
+  roles           UserRole[]
+  sessions        Session[]
+  tokens          AuthToken[]
+  mfaCredentials  MfaCredential[]
+  recoveryCodes   RecoveryCode[]
+  recoveryRequests MfaRecoveryRequest[] @relation("RecoveryFor")
+  recoveryInitiated MfaRecoveryRequest[] @relation("RecoveryInitiatedBy")
+
+  @@map("users")
+}
+
+model UserRole {
+  userId    String   @db.Uuid
+  role      Role
+  grantedAt DateTime @default(now()) @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@map("user_roles")
+}
+
+/// Which roles must use MFA. Editable by administrators; enforced on the server.
+model MfaPolicy {
+  role      Role     @id
+  required  Boolean
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("mfa_policies")
+}
+
+enum SessionStage {
+  /// Password verified; only MFA verification endpoints are reachable.
+  PRE_MFA
+  /// Password (or recovery link) verified; only MFA enrollment endpoints are reachable.
+  MFA_ENROLLMENT
+  FULL
+}
+
+model Session {
+  id                String       @id @default(uuid()) @db.Uuid
+  /// HMAC-SHA256 of the cookie token; the token itself is never stored.
+  tokenHash         String       @unique
+  csrfToken         String
+  userId            String       @db.Uuid
+  stage             SessionStage
+  /// Recovery request this enrollment session belongs to, if any.
+  recoveryRequestId String?      @db.Uuid
+  failedMfaAttempts Int          @default(0)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  lastSeenAt        DateTime     @default(now()) @db.Timestamptz(3)
+  idleTimeoutSec    Int
+  absoluteExpiresAt DateTime     @db.Timestamptz(3)
+  /// Last password(+MFA) confirmation, for sensitive actions.
+  reauthenticatedAt DateTime?    @db.Timestamptz(3)
+  revokedAt         DateTime?    @db.Timestamptz(3)
+  revokedReason     String?
+  ip                String?
+  userAgent         String?
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+enum AuthTokenPurpose {
+  INVITE
+  PASSWORD_RESET
+  MFA_RECOVERY
+}
+
+/// Single-use, short-lived tokens sent by email or handed over in person.
+model AuthToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique
+  expiresAt DateTime         @db.Timestamptz(3)
+  usedAt    DateTime?        @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
+enum MfaCredentialStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+model MfaCredential {
+  id               String              @id @default(uuid()) @db.Uuid
+  userId           String              @db.Uuid
+  status           MfaCredentialStatus
+  /// AES-256-GCM over the base32 TOTP secret, bound to (userId, id) as AAD.
+  secretCiphertext Bytes
+  secretIv         Bytes
+  secretTag        Bytes
+  keyVersion       Int
+  /// Highest accepted TOTP time step; blocks code replay.
+  lastUsedStep     BigInt?
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  /// Pending enrollments are discarded after this time.
+  expiresAt        DateTime?           @db.Timestamptz(3)
+  activatedAt      DateTime?           @db.Timestamptz(3)
+  revokedAt        DateTime?           @db.Timestamptz(3)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recoveryCodes    RecoveryCode[]
+
+  // A partial unique index (one ACTIVE credential per user) is added in the migration SQL.
+  @@index([userId, status])
+  @@map("mfa_credentials")
+}
+
+model RecoveryCode {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @db.Uuid
+  credentialId String        @db.Uuid
+  codeHash     String        @unique
+  usedAt       DateTime?     @db.Timestamptz(3)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credential   MfaCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
+}
+
+enum RecoveryMethod {
+  /// Single-use link to the user's verified email.
+  EMAIL_LINK
+  /// One-time ticket handed to the user after an in-person identity check.
+  IN_PERSON
+}
+
+enum RecoveryStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model MfaRecoveryRequest {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @db.Uuid
+  /// Null when started from the break-glass CLI.
+  initiatedById String?        @db.Uuid
+  reason        String
+  method        RecoveryMethod
+  status        RecoveryStatus @default(PENDING)
+  tokenId       String         @unique @db.Uuid
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  completedAt   DateTime?      @db.Timestamptz(3)
+  user          User           @relation("RecoveryFor", fields: [userId], references: [id], onDelete: Cascade)
+  initiatedBy   User?          @relation("RecoveryInitiatedBy", fields: [initiatedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@map("mfa_recovery_requests")
+}
+
+/// Fixed-window counters for rate limiting, shared by every API instance.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime @db.Timestamptz(3)
+
+  @@map("rate_limits")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+/// Append-only. In production the application role has no UPDATE/DELETE grant.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  at          DateTime @default(now()) @db.Timestamptz(3)
+  /// Null for system/job actions.
+  actorUserId String?  @db.Uuid
+  actorName   String
+  actorRole   String
+  action      String
+  entityType  String?
+  entityId    String?
+  summary     String
+  /// Extra structured context. Must never contain secrets, tokens or codes.
+  metadata    Json?
+  ip          String?
+  requestId   String?
+
+  @@index([at(sort: Desc)])
+  @@index([entityType, entityId])
+  @@index([actorUserId, at(sort: Desc)])
+  @@map("audit_logs")
+}

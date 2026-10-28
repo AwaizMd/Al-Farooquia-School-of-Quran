@@ -6,7 +6,7 @@ export function Forbidden() {
   return (
     <Card>
       <EmptyState icon={Lock} title={t("Not available for this role")} action={<Button to="/dashboard">{t("Back to dashboard")}</Button>}>
-        {t("This page or record belongs to another role in the demo. Use Demo Mode to switch roles.")}
+        {t("This page or record is not available to your account.")}
       </EmptyState>
     </Card>
   )
