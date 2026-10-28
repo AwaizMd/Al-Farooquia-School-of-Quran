@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, ClipboardList, CalendarClock, Award, Settings2, Printer, Save, ChevronRight, BarChart3 } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post, put } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { useActiveChild } from '../../hooks/useScope'
 import { PageHeader, Card, CardHeader, Button, Badge, Modal, Input, Select, EmptyState, Tabs, Notice, cx } from '../../components/ui'
@@ -12,7 +14,6 @@ import { examStatus, examStudents, resultView, mentorGroups } from '../../servic
 import { SUBJECTS } from '../../data/generate'
 import { TRACKS } from '../../constants/labels'
 import { fmtDate, diffDays, addDays, dateLocale } from '../../utils/date'
-import { uid } from '../../utils/format'
 
 const STATUS = { upcoming: ['Upcoming', 'blue'], pending: ['Marks pending', 'gold'], completed: ['Completed', 'green'] }
 
@@ -139,9 +140,11 @@ function StaffExams() {
 }
 
 function GradingEditor() {
-  const { state, dispatch } = useStore()
+  const { state } = useStore()
+  const { refreshExams } = useAuth()
   const toast = useToast()
   const [rows, setRows] = useState(state.grading)
+  const canEdit = state.session.persona === 'admin'
   const [error, setError] = useState('')
   const save = () => {
     const mins = rows.map((r) => Number(r.min))
@@ -149,8 +152,9 @@ function GradingEditor() {
     if (new Set(mins).size !== mins.length) return setError('Minimum percentages must be different.')
     if (!mins.includes(0)) return setError('One grade must start at 0% so every score has a grade.')
     setError('')
-    dispatch({ type: 'UPDATE_GRADING', grading: rows.map((r) => ({ ...r, min: Number(r.min) })) })
-    toast('Grading scale updated', { description: 'All report cards now use the new scale.' })
+    put('/grading', { bands: rows.map((r) => ({ grade: r.grade, ...(r.arabic ? { arabic: r.arabic } : {}), min: Number(r.min), ...(r.meaning ? { meaning: r.meaning } : {}) })) })
+      .then(refreshExams)
+      .then(() => toast('Grading scale updated', { description: 'New results use it. Published report cards keep the scale they were graded with.' }), (err) => setError(err.message))
   }
   return (
     <Card className="max-w-xl">
@@ -165,33 +169,42 @@ function GradingEditor() {
           </li>
         ))}
         {error && <p className="rounded-xl bg-clay-50 px-3 py-2 text-[13px] text-clay-700" role="alert">{error}</p>}
-        <Button icon={Save} onClick={save} className="w-full">{t("Save grading scale")}</Button>
+        {canEdit && <Button icon={Save} onClick={save} className="w-full">{t("Save grading scale")}</Button>}
       </ul>
     </Card>
   )
 }
 
 function CreateExam({ open, onClose, groups }) {
-  const { state, dispatch, today } = useStore()
+  const { state, today } = useStore()
+  const { refreshExams } = useAuth()
+  const [saving, setSaving] = useState(false)
   const toast = useToast()
   const [f, setF] = useState({ title: '', type: 'Monthly Test', track: groups[0]?.track || 'hifz', groupIds: [], date: addDays(today, 7) })
   const [errors, setErrors] = useState({})
   const trackGroups = groups.filter((g) => g.track === f.track)
-  const submit = () => {
+  const submit = async () => {
     const e = {}
     if (f.title.trim().length < 3) e.title = 'Enter a title.'
     if (!f.groupIds.length) e.groups = 'Choose at least one halqa.'
     if (!f.date) e.date = 'Choose a date.'
     setErrors(e)
     if (Object.keys(e).length) return
-    const id = uid('EX')
-    dispatch({ type: 'ADD_EXAM', exam: { id, title: f.title.trim(), type: f.type, track: f.track, groupIds: f.groupIds, date: f.date, examinerId: state.session.role === 'mentor' ? state.session.userId : state.groups.find((g) => g.id === f.groupIds[0]).mentorId, subjects: SUBJECTS[f.track] } })
-    toast('Test scheduled', { description: `${f.title} · ${fmtDate(f.date)}` })
-    setF({ ...f, title: '', groupIds: [] })
-    onClose()
+    setSaving(true)
+    try {
+      await post('/exams', { title: f.title.trim(), type: f.type, track: f.track.toUpperCase(), date: f.date, groupIds: f.groupIds.map((g) => state.groups.find((x) => x.id === g).uuid) })
+      await refreshExams()
+      toast('Test scheduled', { description: `${f.title} · ${fmtDate(f.date)}` })
+      setF({ ...f, title: '', groupIds: [] })
+      onClose()
+    } catch (err) {
+      toast(err.message, { type: 'error' })
+    } finally {
+      setSaving(false)
+    }
   }
   return (
-    <Modal open={open} onClose={onClose} title={t("Create a test")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={Plus} onClick={submit}>{t("Schedule test")}</Button></>}>
+    <Modal open={open} onClose={onClose} title={t("Create a test")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={Plus} onClick={submit} loading={saving}>{t("Schedule test")}</Button></>}>
       <div className="grid gap-3.5 sm:grid-cols-2">
         <Input className="sm:col-span-2" label={t("Title")} required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} error={errors.title} placeholder="e.g. Juz 3 Review Test" />
         <Select label={t("Type")} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} options={['Monthly Test', 'Hifz Juz Test', 'Oral Assessment', 'Term Exam']} />

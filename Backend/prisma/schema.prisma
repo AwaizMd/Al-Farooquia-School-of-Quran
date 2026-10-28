@@ -288,6 +288,7 @@ model Group {
   mentors            GroupMentorAssignment[]
   enrollments        GroupEnrollment[]
   attendanceSessions AttendanceSession[]
+  exams              ExamGroup[]
 
   @@map("groups")
 }
@@ -316,6 +317,7 @@ model StaffProfile {
 
   assignments     GroupMentorAssignment[]
   learningRecords LearningRecord[]
+  examsExamined   Exam[]
 
   @@map("staff_profiles")
 }
@@ -387,6 +389,7 @@ model Student {
   concessions     Concession[]
   attendance      AttendanceRecord[]
   learningRecords LearningRecord[]
+  examResults     ExamResult[]
 
   @@index([groupId, status])
   @@index([name])
@@ -562,6 +565,119 @@ model LearningRecordRevision {
 
   @@index([recordId])
   @@map("learning_record_revisions")
+}
+
+// ---------------------------------------------------------------------------
+// Assessments: grading scales, exams, marks
+// ---------------------------------------------------------------------------
+
+/// Versioned grading scale. Editing creates a new version; published exams
+/// keep the version they were graded with.
+model GradingScale {
+  id          String      @id @default(uuid()) @db.Uuid
+  version     Int         @unique
+  active      Boolean     @default(false)
+  createdById String?     @db.Uuid
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  bands       GradeBand[]
+  exams       Exam[]
+
+  @@map("grading_scales")
+}
+
+model GradeBand {
+  id         String       @id @default(uuid()) @db.Uuid
+  scaleId    String       @db.Uuid
+  grade      String
+  arabic     String?
+  minPercent Int          @db.SmallInt
+  meaning    String?
+  scale      GradingScale @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+
+  @@unique([scaleId, minPercent])
+  @@map("grade_bands")
+}
+
+enum ExamStatus {
+  SCHEDULED
+  /// Results visible to students and guardians.
+  PUBLISHED
+  CANCELLED
+}
+
+model Exam {
+  id             String        @id @default(uuid()) @db.Uuid
+  code           String        @unique
+  title          String
+  type           String
+  track          Track
+  date           DateTime      @db.Date
+  examinerId     String?       @db.Uuid
+  status         ExamStatus    @default(SCHEDULED)
+  /// Set when published; results are graded with this scale from then on.
+  gradingScaleId String?       @db.Uuid
+  publishedAt    DateTime?     @db.Timestamptz(3)
+  publishedById  String?       @db.Uuid
+  createdById    String?       @db.Uuid
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  examiner       StaffProfile? @relation(fields: [examinerId], references: [id], onDelete: SetNull)
+  gradingScale   GradingScale? @relation(fields: [gradingScaleId], references: [id], onDelete: Restrict)
+  groups         ExamGroup[]
+  subjects       ExamSubject[]
+  results        ExamResult[]
+
+  @@index([date])
+  @@map("exams")
+}
+
+model ExamGroup {
+  examId  String @db.Uuid
+  groupId String @db.Uuid
+  exam    Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@id([examId, groupId])
+  @@map("exam_groups")
+}
+
+model ExamSubject {
+  id       String     @id @default(uuid()) @db.Uuid
+  examId   String     @db.Uuid
+  name     String
+  maxMarks Int        @db.SmallInt
+  position Int        @db.SmallInt
+  exam     Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  marks    ExamMark[]
+
+  @@unique([examId, name])
+  @@map("exam_subjects")
+}
+
+model ExamResult {
+  id          String     @id @default(uuid()) @db.Uuid
+  examId      String     @db.Uuid
+  studentId   String     @db.Uuid
+  absent      Boolean    @default(false)
+  remark      String?
+  enteredById String?    @db.Uuid
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+  exam        Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student     Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  marks       ExamMark[]
+
+  @@unique([examId, studentId])
+  @@map("exam_results")
+}
+
+model ExamMark {
+  resultId  String      @db.Uuid
+  subjectId String      @db.Uuid
+  marks     Int         @db.SmallInt
+  result    ExamResult  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  subject   ExamSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([resultId, subjectId])
+  @@map("exam_marks")
 }
 
 // ---------------------------------------------------------------------------

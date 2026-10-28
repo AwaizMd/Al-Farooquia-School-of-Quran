@@ -98,7 +98,39 @@ export async function seedActivity(prisma: PrismaClient, today: string) {
     revisionQuality: r.revisionQuality, targetStatus: r.targetStatus.toUpperCase(), comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp,
   }))
   await prisma.learningRecord.createMany({ data: lessons })
+
   return `${marks} attendance marks, ${lessons.length} lesson records`
+}
+
+
+/** Development only: the demo exams and their results. */
+export async function seedExams(prisma: PrismaClient, today: string) {
+  if ((await prisma.exam.count()) > 0) return 'exams already present, skipped'
+  const demo = (await load('generate.js')).generateSeed(today)
+  const students = Object.fromEntries((await prisma.student.findMany({ select: { id: true, admissionNo: true } })).map((x) => [x.admissionNo, x]))
+  const staff = Object.fromEntries((await prisma.staffProfile.findMany({ select: { id: true, code: true } })).map((x) => [x.code, x.id]))
+  // Exams and results; exams with results are published with the current grading scale.
+  const groupIds = Object.fromEntries((await prisma.group.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]))
+  const scale = await prisma.gradingScale.findFirstOrThrow({ where: { active: true } })
+  let n = 0
+  for (const e of demo.exams as Any[]) {
+    const results = (demo.results as Any[]).filter((r) => r.examId === e.id)
+    const exam = await prisma.exam.create({
+      data: {
+        code: `EX-${String(++n).padStart(4, '0')}`, title: e.title, type: e.type, track: e.track.toUpperCase(), date: d(e.date), examinerId: staff[e.examinerId] ?? null,
+        ...(results.length ? { status: 'PUBLISHED', publishedAt: new Date(), gradingScaleId: scale.id } : {}),
+        groups: { create: e.groupIds.map((g: string) => ({ groupId: groupIds[g]! })) },
+        subjects: { create: e.subjects.map((s: Any, i: number) => ({ name: s.name, maxMarks: s.max, position: i })) },
+      },
+      include: { subjects: true },
+    })
+    for (const r of results) {
+      if (!students[r.studentId]) continue
+      await prisma.examResult.create({ data: { examId: exam.id, studentId: students[r.studentId]!.id, remark: r.remark, marks: { create: exam.subjects.map((s) => ({ subjectId: s.id, marks: r.marks[s.name] })) } } })
+    }
+  }
+  await prisma.$executeRawUnsafe(`SELECT setval('exam_code_seq', ${n})`)
+  return `${n} exams`
 }
 
 /** Link the dev sign-in accounts to their people records. */

@@ -19,6 +19,7 @@ export async function seedPeopleFixture() {
     warden: await makeUser({ email: 'warden@x.test', roles: ['WARDEN'] }),
     student: await makeUser({ username: 's-1', roles: ['STUDENT'] }),
   }
+  await prisma.gradingScale.create({ data: { version: 1, active: true, bands: { create: [{ grade: 'Mumtaz', minPercent: 85 }, { grade: 'Jayyid Jiddan', minPercent: 70 }, { grade: 'Jayyid', minPercent: 55 }, { grade: 'Maqbool', minPercent: 40 }, { grade: 'Rasib', minPercent: 0 }] } } })
   const plan = await prisma.feePlan.create({ data: { code: 'fp', name: 'Hifz', amountMinor: 150000, currency: 'INR' } })
   const m1 = await prisma.staffProfile.create({ data: { code: 'm1', displayName: 'Mentor One', title: 'Hifz Mentor', userId: users.mentor.id } })
   const m2 = await prisma.staffProfile.create({ data: { code: 'm2', displayName: 'Mentor Two', title: 'Nazira Mentor' } })

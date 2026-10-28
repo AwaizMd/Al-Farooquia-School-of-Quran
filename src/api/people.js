@@ -102,3 +102,16 @@ export async function loadActivity() {
   ])
   return { attendance: attendance.days, today: attendance.today, sabaq: lessons.map(toLesson) }
 }
+
+/** Exams, results and the current grading scale the account may see. */
+export async function loadExams() {
+  const [exams, results, grading] = await Promise.all([get('/exams'), get('/exam-results'), get('/grading')])
+  return {
+    exams: exams.items.map((e) => ({
+      id: e.code, uuid: e.id, title: e.title, type: e.type, track: e.track.toLowerCase(), groupIds: e.groups.map((g) => g.code), date: e.date,
+      examinerId: e.examiner?.code ?? null, subjects: e.subjects.map((s) => ({ name: s.name, max: s.max })), status: e.status, published: e.status === 'PUBLISHED', grading: e.grading,
+    })),
+    results: results.items.map((r) => ({ id: r.id, examId: r.examCode, studentId: r.admissionNo, marks: r.marks, remark: r.remark ?? '', absent: r.absent })),
+    grading: grading.bands,
+  }
+}

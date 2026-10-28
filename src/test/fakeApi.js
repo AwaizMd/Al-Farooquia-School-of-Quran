@@ -66,6 +66,16 @@ export function fakeFetch(personaName) {
       const items = demo.sabaq.filter((r) => codes.has(r.studentId)).map((r) => ({ ...r, admissionNo: r.studentId, mentor: { code: r.mentorId }, category: r.category.toUpperCase(), tajweed: r.tajweed.toUpperCase(), prevRevision: r.prevRevision.toUpperCase(), targetStatus: r.targetStatus.toUpperCase() }))
       return json({ total: items.length, page: 1, pageSize: 1000, items })
     }
+    if (path === '/exams') {
+      const codes = new Set(mine.map((x) => x.group.code))
+      const items = demo.exams.filter((e) => p.roles.some((r) => r === 'ADMIN' || r === 'PRINCIPAL') || e.groupIds.some((g) => codes.has(g))).map((e) => ({ id: uuid(e.id), code: e.id, title: e.title, type: e.type, track: e.track.toUpperCase(), date: e.date, status: 'PUBLISHED', groups: e.groupIds.map((g) => ({ code: g })), examiner: { code: e.examinerId }, subjects: e.subjects, grading: null }))
+      return json({ items })
+    }
+    if (path === '/exam-results') {
+      const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
+      return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
+    }
+    if (path === '/grading') return json({ version: 1, bands: demo.grading })
     if (path === '/auth/sessions') return json({ items: [] })
     if (path === '/admin/users') return json({ total: 0, page: 1, pageSize: 100, items: [] })
     return json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404)

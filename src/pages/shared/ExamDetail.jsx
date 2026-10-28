@@ -1,8 +1,10 @@
 import { t } from "../../i18n/I18nProvider"
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Save, Printer, Info } from 'lucide-react'
+import { Save, Printer, Info, Send } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post, put } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { PageHeader, Card, Button, Avatar, Input, Notice, Badge, EmptyState } from '../../components/ui'
 import { NotFound, Forbidden } from './Fallbacks'
@@ -11,7 +13,10 @@ import { fmtLong } from '../../utils/date'
 
 export default function ExamDetail() {
   const { id } = useParams()
-  const { state, idx, dispatch, today } = useStore()
+  const { state, idx, today } = useStore()
+  const { refreshExams } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const isAdmin = state.session.persona === 'admin'
   const toast = useToast()
   const exam = state.exams.find((e) => e.id === id)
   const [draft, setDraft] = useState({})
@@ -32,7 +37,7 @@ export default function ExamDetail() {
 
   const setMark = (sid, sub, v) => setDraft((d) => ({ ...d, [sid]: { ...d[sid], marks: { ...d[sid].marks, [sub]: v } } }))
 
-  const save = () => {
+  const save = async (reason) => {
     const e = {}
     const entries = []
     students.forEach((s) => {
@@ -50,8 +55,31 @@ export default function ExamDetail() {
     setErrors(e)
     if (Object.keys(e).length) return toast('Some marks are invalid', { type: 'error', description: 'Each subject needs a number within its maximum.' })
     if (!entries.length) return toast('Enter marks for at least one student', { type: 'error' })
-    dispatch({ type: 'SAVE_RESULTS', examId: exam.id, entries })
-    toast('Marks saved', { description: `${entries.length} students · grades calculated` })
+    setSaving(true)
+    try {
+      await put(`/exams/${exam.id}/results`, { entries: entries.map((x) => ({ ...x, studentId: idx.students[x.studentId].uuid })), ...(reason ? { reason } : {}) })
+      await refreshExams()
+      toast('Marks saved', { description: `${entries.length} students · grades calculated` })
+    } catch (err) {
+      if (err.code === 'REASON_REQUIRED') {
+        const r = window.prompt(t('These results are published. Why are you changing them?'))
+        if (r && r.trim().length >= 3) return save(r.trim())
+      }
+      toast(err.message, { type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const publish = async () => {
+    if (!window.confirm(t('Publish these results to students and guardians? They are graded with the current scale from now on.'))) return
+    try {
+      await post(`/exams/${exam.id}/publish`)
+      await refreshExams()
+      toast('Results published', { description: 'Students and guardians can now see them.' })
+    } catch (err) {
+      toast(err.message, { type: 'error' })
+    }
   }
 
   return (
@@ -90,7 +118,10 @@ export default function ExamDetail() {
         </div>
       ) : <Card><EmptyState title={t("No students in these halqas")} /></Card>}
       <div className="fixed inset-x-0 bottom-[60px] z-30 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur lg:static lg:mt-4 lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-6xl justify-end"><Button icon={Save} onClick={save} className="w-full lg:w-auto">{t("Save marks")}</Button></div>
+        <div className="mx-auto flex max-w-6xl justify-end gap-2">
+          {exam.published ? <Badge tone="green" className="self-center">{t("Published")}</Badge> : isAdmin && !upcoming && <Button variant="secondary" icon={Send} onClick={publish} className="w-full lg:w-auto">{t("Publish results")}</Button>}
+          {(!exam.published || isAdmin) && <Button icon={Save} onClick={() => save()} loading={saving} className="w-full lg:w-auto">{t("Save marks")}</Button>}
+        </div>
       </div>
     </div>
   )

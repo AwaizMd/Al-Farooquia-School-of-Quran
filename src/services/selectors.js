@@ -221,11 +221,14 @@ export function gradeFor(pct, grading) {
   return sorted.find((g) => pct >= g.min) || sorted[sorted.length - 1]
 }
 
+const ABSENT_GRADE = { grade: 'Absent', arabic: 'غائب', min: -1, meaning: 'Did not sit the exam' }
+
 export function resultView(result, exam, grading) {
   const max = exam.subjects.reduce((a, s) => a + s.max, 0)
   const total = exam.subjects.reduce((a, s) => a + (Number(result.marks[s.name]) || 0), 0)
   const pct = max ? Math.round((total / max) * 100) : 0
-  return { ...result, total, max, pct, grade: gradeFor(pct, grading) }
+  // A published exam keeps the grading scale it was graded with.
+  return { ...result, total, max, pct, grade: result.absent ? ABSENT_GRADE : gradeFor(pct, exam.grading || grading) }
 }
 
 export function examStudents(state, exam) {

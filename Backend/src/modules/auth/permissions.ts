@@ -23,11 +23,13 @@ export const PERMISSIONS = [
   'attendance.correct',
   // Record or edit learning records for any student (mentors may for their own halqas).
   'learning.manage',
+  // Schedule any exam, publish results, change the grading scale.
+  'exams.manage',
 ] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
-  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage'],
+  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage'],
   // Approved: the Principal sees institution-wide information but not security administration.
   PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct'],
   MENTOR: [],
