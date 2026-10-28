@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { UserPlus, SlidersHorizontal, LayoutGrid, List, Download, Users } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { logEvent } from '../../api/audit'
 import { useVisibleStudents } from '../../hooks/useScope'
 import { useQueryState } from '../../hooks/useQueryState'
 import { PageHeader, Button, SearchInput, Select, Stagger, staggerItem, EmptyState, Card, Avatar, Segmented, LinkRow } from '../../components/ui'
@@ -48,7 +49,7 @@ export default function Students() {
       Level: currentLevel(state, idx, s.id).label, Learning: LEARNING_STATUS[learningStatus(idx, s.id, today).key].label,
       Guardian: idx.parents[s.guardianId]?.name, Phone: s.phone, Hostel: s.hostel ? 'Yes' : 'No', Admission: s.admissionDate, Status: s.status,
     })))
-    dispatch({ type: 'LOG', entry: { action: 'CSV exported', entity: 'Student list', description: `${list.length} rows` } })
+    logEvent('export.csv', 'Student list', `${list.length} rows`)
     toast('CSV downloaded', { description: `${list.length} students exported.` })
   }
 

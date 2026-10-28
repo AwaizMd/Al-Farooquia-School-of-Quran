@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Receipt, Download, CreditCard, Wallet, AlertCircle, TrendingUp, Percent, BellRing } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { logEvent } from '../../api/audit'
 import { useActiveChild } from '../../hooks/useScope'
 import { useQueryState } from '../../hooks/useQueryState'
 import { PageHeader, Card, CardHeader, Button, Tabs, SearchInput, Select, Input, Stat, Avatar, EmptyState, Notice } from '../../components/ui'
@@ -96,7 +97,7 @@ function Dues({ onPay }) {
     .sort((a, b) => b.f.overdue - a.f.overdue || b.f.balance - a.f.balance)
   const exportCsv = () => {
     downloadCSV(`fee-dues-${today}`, list.map(({ s, f }) => ({ ID: s.id, Name: s.name, Halqa: idx.groups[s.groupId]?.name, Guardian: idx.parents[s.guardianId]?.name, Phone: idx.parents[s.guardianId]?.phone, Billed: f.total, Paid: f.paid, Outstanding: f.balance, Overdue: f.overdue, Status: FEE_STATUS[f.status].label, 'Next due': f.nextDue?.dueDate || '' })))
-    dispatch({ type: 'LOG', entry: { action: 'CSV exported', entity: 'Fee dues report', description: `${list.length} rows` } })
+    logEvent('export.csv', 'Fee dues report', `${list.length} rows`)
   }
   return (
     <Card>

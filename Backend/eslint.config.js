@@ -12,7 +12,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**', 'prisma/seed.ts'],
+    files: ['scripts/**', 'prisma/seed.ts', 'prisma/seed-people.ts', 'src/cli/**'],
     languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
     rules: { 'no-console': 'off' },
   },

@@ -11,7 +11,7 @@ import { PageHeader, Card, CardHeader, Button, Badge, Modal, Input, Select, Empt
 import ChildSwitcher from '../../components/cards/ChildSwitcher'
 import { HorizontalBars, C } from '../../components/charts/Charts'
 import { examStatus, examStudents, resultView, mentorGroups } from '../../services/selectors'
-import { SUBJECTS } from '../../data/generate'
+import { SUBJECTS } from '../../constants/exams'
 import { TRACKS } from '../../constants/labels'
 import { fmtDate, diffDays, addDays, dateLocale } from '../../utils/date'
 

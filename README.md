@@ -1,93 +1,73 @@
-# Al Farooquia School of Quran — Madarsa Management System (Demo)
+# Al Farooquia School of Quran — Madarsa Management System
 
-An interactive, mobile-first frontend prototype for presenting a Madarsa management product to an owner and management team. Every number comes from one shared, fictional dataset stored in the browser. Nothing is sent to a server.
+A mobile-first web app for running a Madarsa. It serves administrators, the Principal, mentors, wardens, students and parents, in English and Urdu (right-to-left).
 
-## Run it
+| Part | Where | Stack |
+|---|---|---|
+| Web app | this folder (`src/`) | React 18, Vite 7, Tailwind CSS 3, React Router 7, Framer Motion, Recharts |
+| API and background worker | [`Backend/`](Backend/README.md) | Node.js 22, Express 5, TypeScript, PostgreSQL 17 (Prisma 7), pg-boss |
+| Deployment | [`deploy/`](deploy) and [`Backend/docs/DEPLOYMENT.md`](Backend/docs/DEPLOYMENT.md) | Docker Compose, Caddy (HTTPS) |
+
+## Run it locally
 
 ```bash
+# API (see Backend/README.md for first-time setup)
+cd Backend && npm install && npm run db:start   # keep running
+cd Backend && npm run db:deploy && npm run db:seed && npm run dev
+cd Backend && npm run dev:worker                # optional: scheduled jobs
+
+# Web app
 npm install
-npm run dev
+npm run dev                                     # http://localhost:5173
 ```
 
-Open http://localhost:5173. `npm run build` produces a static `dist/` folder you can host anywhere (it needs SPA fallback to `index.html`).
+Sign in with one of the development accounts listed in [Backend/README.md](Backend/README.md#development-data-npm-run-dbseed); all use the password `farooquia-dev-only`. Administrator, Principal and Mentor accounts set up an authenticator app (Google or Microsoft Authenticator) at first sign-in.
 
-## Sign-in (real backend)
+`npm run build` produces `dist/`, which Caddy serves in production with `/api` proxied to the backend.
 
-Sign-in now goes through the backend in [Backend/](Backend/README.md): server sessions, role-based two-step verification (TOTP), password reset, invitations and lost-authenticator recovery. Start the backend as described in its README, then run `npm run dev` here. The dev accounts and their password are listed in [Backend/README.md](Backend/README.md#dev-accounts-from-npm-run-db-seed). Administrator, Principal and Mentor accounts set up an authenticator app at their first sign-in.
+## Tests
 
-**Migration in progress:** sign-in, accounts (**Users & Access**) and **Account security** are server-backed. The other screens still show the fictional in-browser dataset described below. A signed-in user sees the demo record for their role until each module moves to the API. Principal and Warden see only their account page until their dashboards are built. The old Demo Mode role switcher has been removed.
-
-## Suggested presentation flow
-
-1. Admin dashboard: KPIs, action centre, charts.
-2. Attendance overview, then Fees.
-3. Open Abdullah Khan's profile.
-4. As the mentor, record Abdullah's pending Sabaq for today.
-5. As the student, open My Learning Journey to see the new record and target.
-6. As the parent, review Abdullah's progress (and switch to Maryam).
-7. Open Fees and use **Pay fees (demo)**.
-8. Watch the outstanding balance drop to zero and the receipt appear.
-9. Preview the monthly progress report (print / save as PDF).
-10. Back as admin: collections, reminders queue and activity log have all updated.
-
-## What's included
-
-- Role-based dashboards for admin, mentor, student and parent, with separate navigation for each role.
-- Students: search, filters, add/edit with validation, and a tabbed profile (overview, attendance, Sabaq, exams, fees, guardian, hostel).
-- Mentors: directory, profiles, assigning a mentor to a halqa, active/inactive status.
-- Attendance: daily marking (present, late, absent, excused), halqa summaries, a heatmap, monthly summaries and repeated-absence alerts.
-- Record Sabaq: Sabaq, Sabqi, Manzil, Nazira and Qaida. Ayah ranges are checked against real Surah lengths, the Juz is worked out automatically and the next target is suggested.
-- Learning journey with Juz and Qaida milestones, plus a parent learning report with areas to improve and practice to do at home.
-- Exams: schedule, test creation, marks entry with validation, an editable grading scale (Mumtaz … Rasib) and printable report cards.
-- Fees: plans, concessions, partial payments, receipts, CSV exports and a simulated parent checkout.
-- Fee reminders: a configurable schedule, message template, preview and "mark as sent". A student drops off the queue once their dues are cleared.
-- Hostel: rooms and beds (a bed can never be assigned twice), resident directory, night roll call and alerts where class and hostel attendance don't match.
-- Digital library: search, categories, access rules, two bundled sample PDFs and an upload form that works for the current session only.
-- Reports in 8 types with date and halqa filters, CSV export and print.
-- A simulated activity log and in-app notifications.
-- Settings: Madarsa name, Arabic name, currency and weekly holiday.
-
-## Project structure
-
-```
-src/
-  app/            App + routes (role gates)
-  components/     ui kit, layout shell, charts, badges, error boundary
-  constants/      branding config, labels, navigation
-  context/        DemoStore (reducer + localStorage), toasts
-  data/           Quran reference data, fictional people, seed generator
-  features/       sabaq, fees, students (shared feature components)
-  hooks/          scope (parent child selection), URL query state, smooth scroll
-  pages/          auth, admin, mentor, student, parent, shared
-  services/       selectors — all derived statistics
-  utils/          dates, currency formatting, CSV
+```bash
+npm test                     # web app: renders every page for every role against a fake API
+cd Backend && npm test       # API: 140 unit, integration and security tests on a throwaway database
 ```
 
-Branding lives in `src/constants/config.js` and the logo at `public/brand/al-farooquia-logo.jpg`. The seed generator is deterministic, so a reset always restores the same dataset relative to today's date.
+## What each role can do
 
-## Libraries
+- **Administrator:**
+  - Manages students (admissions, guardians, halqas, concessions), mentors and halqa assignments.
+  - Handles attendance corrections, exams and grading, fees (invoices, office payments, adjustments, refunds) and reminders.
+  - Runs the hostel and library, reports, the activity log, institution settings, the parent-report schedule and background jobs.
+  - Manages accounts, roles and MFA resets.
+- **Principal:** reads everything academic and operational, including fees, reports and the activity log, and can correct attendance. Has no settings, account or security administration.
+- **Mentor:**
+  - Sees only the halqas currently assigned to them.
+  - Marks today's attendance, records Sabaq/Sabqi/Manzil/Nazira/Qaida, and schedules tests and enters marks.
+  - Can add library resources.
+- **Warden:** manages hostel rooms, beds, transfers and the night roll call, seeing residents' hostel details only.
+- **Parent:**
+  - Sees each linked child (and can switch between them): attendance, lessons and targets, mentor feedback, published results and report cards, fees and receipts, and notifications.
+  - Pays fees online, and receives scheduled progress reports.
+- **Student:** sees their own learning journey, records, results, fees and library.
 
-React 18 + Vite, Tailwind CSS 3, React Router 6, Framer Motion (page, card, dialog and progress animations, which respect reduced-motion), Recharts, Lucide icons, and Lenis for gentle wheel smoothing on desktop only.
+Every rule above is enforced by the API: a hidden button is never the only protection. See [Backend/docs/SECURITY.md](Backend/docs/SECURITY.md).
 
-Animate UI is a copy-in shadcn/TypeScript component registry rather than an npm package, so its effects were built directly with Framer Motion to avoid pulling in a second component system. No package called "Tenor/Tenzer Scroll" could be identified, so Lenis is used as the specified fallback.
+## How the web app gets its data
 
-## Honest limitations
+`src/api/` is the only code that talks to the server. After sign-in, the records the account is allowed to see are loaded into an in-memory cache (`src/context/DemoStore.jsx`), and the screens compute their figures from it with `src/services/selectors.js`. Every change is sent to the API first, and the affected data is then reloaded. Nothing is stored in the browser apart from the language choice.
 
-This is a static frontend prototype.
+`src/data/` keeps the fictional demo dataset. It is used only to seed development databases and by the tests; it is not part of the production bundle.
 
-- Sign-in, sessions and MFA are enforced by the backend. Restrictions on the screens that still use demo data are only checks in the browser until those modules move to the API.
-- Payments are a demonstration: no card or bank details are collected and no money moves.
-- Reminders and notifications are never transmitted by SMS, WhatsApp, email or push.
-- Uploaded library files last only for the current browser tab.
-- The activity log can be reset and is not a tamper-proof audit trail.
-- All names, phone numbers and emails are fictional.
+## Before going live
 
-A production rollout would need its own phases: a secure backend (e.g. MERN), real authentication and authorisation, payment and messaging integrations, file storage, backups and data migration.
+These still need real accounts or decisions from the Madarsa:
+
+1. **Email:** an SMTP provider for invitations, password resets, reminders and reports. This is required.
+2. **Razorpay:** a merchant account, then testing in test mode. Until then, online payment shows "pay at the office".
+3. **WhatsApp or SMS (optional):** a provider, approved templates, and DLT registration for SMS in India.
+4. **Hosting:** a VPS and domain. The deployment files have not been run yet.
+5. **Real data:** the people records, entered through the app or imported.
 
 ## Languages (English / اردو)
 
-Switch with the **EN / اردو** control on the login screen, in the header (wider phones and up) or under **More** on a phone. The choice is remembered on that device. Urdu switches the whole layout to right-to-left and uses Noto Naskh Arabic for body text, with Noto Nastaliq Urdu for headings.
-
-- Translations live in `src/i18n/ur.js`, keyed by the English text. Any missing key falls back to English, so nothing disappears.
-- Mentor comment templates, notifications, target phrases and Surah names (shown in Arabic script) are translated too.
-- Names, addresses, library titles and descriptions, activity-log descriptions, report table columns and CSV exports stay in English. So does anything a user types.
+Switch with the **EN / اردو** control on the sign-in screen, in the header, or under **More** on a phone. Urdu switches the layout to right-to-left. Translations live in `src/i18n/ur.js`, keyed by the English text; any missing key falls back to English. Names, addresses, library titles, activity-log text and CSV exports stay in English, as does anything a user types.

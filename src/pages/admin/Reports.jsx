@@ -2,6 +2,7 @@ import { t } from "../../i18n/I18nProvider"
 import { useMemo } from 'react'
 import { Download, Printer, Users, CalendarCheck, Sprout, BarChart3, Wallet, AlertCircle, BedDouble, UserRound } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { logEvent } from '../../api/audit'
 import { useToast } from '../../context/ToastContext'
 import { useQueryState } from '../../hooks/useQueryState'
 import { PageHeader, Card, Button, Select, Input, cx } from '../../components/ui'
@@ -96,7 +97,7 @@ export default function Reports() {
   const cols = report.rows[0] ? Object.keys(report.rows[0]) : []
   const exportCsv = () => {
     downloadCSV(`${rid}-report-${from}-to-${to}`, report.rows)
-    dispatch({ type: 'LOG', entry: { action: 'CSV exported', entity: `${meta.label} report`, description: `${report.rows.length} rows · ${from} to ${to}` } })
+    logEvent('export.csv', `${meta.label} report`, `${report.rows.length} rows · ${from} to ${to}`)
     toast('CSV downloaded', { description: `${report.rows.length} rows` })
   }
 

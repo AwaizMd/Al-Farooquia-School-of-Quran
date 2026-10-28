@@ -19,6 +19,7 @@ import { assessmentsRouter } from './modules/assessments/assessments.routes.js'
 import { feesRouter, webhookRouter } from './modules/fees/fees.routes.js'
 import { notificationsRouter } from './modules/notifications/notifications.routes.js'
 import { campusRouter } from './modules/hostel/campus.routes.js'
+import { auditRouter } from './modules/audit-logs/audit.routes.js'
 
 export function createApp() {
   const app = express()
@@ -69,6 +70,7 @@ export function createApp() {
   api.use(feesRouter)
   api.use(notificationsRouter)
   api.use(campusRouter)
+  api.use(auditRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

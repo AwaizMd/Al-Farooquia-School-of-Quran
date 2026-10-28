@@ -2,6 +2,7 @@ import { t } from "../../i18n/I18nProvider"
 import { useEffect, useRef } from 'react'
 import { Printer, Info, CalendarClock } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { logEvent } from '../../api/audit'
 import { useActiveChild, useVisibleStudents } from '../../hooks/useScope'
 import { useQueryState } from '../../hooks/useQueryState'
 import { PageHeader, Card, Button, Select, Segmented, Notice, Logo, StarMotif, EmptyState } from '../../components/ui'
@@ -28,7 +29,7 @@ export default function ProgressReport() {
   useEffect(() => {
     if (!student || logged.current === key) return
     logged.current = key
-    dispatch({ type: 'LOG', entry: { action: 'Progress report preview generated', entity: student.name, entityId: student.id, description: `${period === 'week' ? 'Weekly' : 'Monthly'} report preview (not sent)` } })
+    logEvent('report.previewed', `Progress report ${student.id}`, `${period === 'week' ? 'Weekly' : 'Monthly'} preview`)
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!student) return <Card><EmptyState title={t("No student selected")} /></Card>

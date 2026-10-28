@@ -23,14 +23,4 @@ export const CURRENCIES = {
   AED: { code: 'AED', symbol: 'AED', locale: 'en-AE', label: 'UAE Dirham (AED)' },
 }
 
-export const STORAGE_KEY = 'farooquia-madarsa-demo-v2'
-export const DEMO_PASSWORD = 'Demo123!'
-
-export const DEMO_ACCOUNTS = [
-  { role: 'admin', email: 'admin@farooquia.demo', userId: 'admin', label: 'Admin / Management', blurb: 'Full overview of students, fees, staff and reports' },
-  { role: 'mentor', email: 'mentor@farooquia.demo', userId: 'm1', label: 'Mentor / Teacher', blurb: 'Record Sabaq, mark attendance, track your halqa' },
-  { role: 'student', email: 'student@farooquia.demo', userId: 'S-1001', label: 'Student', blurb: 'Your learning journey, Sabaq history and library' },
-  { role: 'parent', email: 'parent@farooquia.demo', userId: 'p1', label: 'Parent / Guardian', blurb: "Your children's progress, reports and fees" },
-]
-
 export const ADMIN_USER = { id: 'admin', name: 'Maulana Shoaib Akhtar', title: 'Muhtamim (Principal)', email: 'admin@farooquia.demo' }

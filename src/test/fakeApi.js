@@ -75,6 +75,7 @@ export function fakeFetch(personaName) {
       const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
       return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
     }
+    if (path === '/admin/audit-logs') return json({ total: 1, page: 1, pageSize: 100, items: [{ id: 'a1', at: new Date().toISOString(), actorName: 'Office', actorRole: 'ADMIN', action: 'fees.payment_recorded', entityType: 'student', entityId: mine[0]?.id, summary: 'Receipt NR-2026-0001' }] })
     if (path === '/library') return json({ items: [{ id: 'l1', title: 'Madd rules', category: 'Tajweed', type: 'Tajweed Guide', author: 'x', description: 'x', pages: 3, audience: 'ALL_STUDENTS', status: 'ACTIVE', uploadedAt: new Date().toISOString(), uploadedBy: 'Office', file: { name: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 10 }, canOpen: true }] })
     if (path === '/hostel') return json({ rooms: [{ id: 'r1', code: 'R-101', block: 'Bilal Block', floor: 'Ground', beds: [{ id: 'b1', label: 'Bed A', occupant: students.find((x) => x.hostelResident) }, { id: 'b2', label: 'Bed B', occupant: null }] }], unassigned: [] })
     if (path === '/hostel/roll-call') return json({ from: '', to: '', days: demo.hostelAttendance })

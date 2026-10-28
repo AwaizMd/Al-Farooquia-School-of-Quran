@@ -1,0 +1,36 @@
+# Production web server: HTTPS (automatic certificates), the built web app,
+# and the API on the same origin so session cookies stay first-party.
+# Replace madarsa.example.org with the real domain.
+
+madarsa.example.org {
+	encode zstd gzip
+
+	# API and gateway webhooks
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	# Single-page app: unknown paths serve index.html
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Razorpay's checkout script and frame are the only third-party code; fonts come from Google Fonts.
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.razorpay.com; frame-src https://api.razorpay.com https://checkout.razorpay.com; connect-src 'self' https://lumberjack.razorpay.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	# Long cache for fingerprinted assets, none for the HTML shell.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+}

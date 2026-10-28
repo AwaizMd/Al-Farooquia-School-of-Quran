@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { get, onSessionLost, post, setCsrfToken } from '../api/client'
 import { loadActivity, loadCampus, loadExams, loadFees, loadInbox, loadPeople } from '../api/people'
+import { loadAudit } from '../api/audit'
 import { useStore } from './DemoStore'
 
 const AuthContext = createContext(null)
@@ -57,6 +58,9 @@ export function AuthProvider({ children }) {
       dispatch({ type: 'HYDRATE_FEES', ...fees })
       dispatch({ type: 'HYDRATE_INBOX', ...inbox })
       dispatch({ type: 'HYDRATE_CAMPUS', ...campus })
+      const canReadAudit = session.user?.roles?.some((r) => r === 'ADMIN' || r === 'PRINCIPAL')
+      // The activity log is secondary: if it cannot load, the rest of the app still works.
+      dispatch({ type: 'HYDRATE_AUDIT', audit: canReadAudit ? await loadAudit(people.students).catch(() => []) : [] })
       setPeople({ status: 'ready', error: null })
     } catch (err) {
       setPeople({ status: 'error', error: err })
