@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BedDouble, DoorOpen, Users, AlertTriangle, UserPlus, LogOut, Save, CheckCheck } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { useQueryState } from '../../hooks/useQueryState'
 import { PageHeader, Card, CardHeader, Tabs, Stat, Avatar, Button, Modal, Select, ConfirmDialog, EmptyState, Input, cx, ProgressBar, Notice, SearchInput } from '../../components/ui'
@@ -66,7 +68,8 @@ function Overview({ sum, alerts, setTab }) {
 }
 
 function Rooms() {
-  const { state, idx, dispatch } = useStore()
+  const { state, idx } = useStore()
+  const { refreshCampus } = useAuth()
   const toast = useToast()
   const [assign, setAssign] = useState(null)
   const [pick, setPick] = useState('')
@@ -74,13 +77,17 @@ function Rooms() {
   const residents = state.students.filter((s) => s.hostel && s.status === 'active')
   const unassigned = residents.filter((s) => !idx.bedByStudent[s.id])
 
-  const doAssign = () => {
+  const doAssign = async () => {
     if (!pick) return
     const bed = state.beds.find((b) => b.id === assign.id)
-    if (bed.studentId) { toast('This bed is already occupied', { type: 'error' }); setAssign(null); return }
     const moving = idx.bedByStudent[pick]
-    dispatch({ type: 'ASSIGN_BED', bedId: assign.id, studentId: pick })
-    toast(moving ? 'Student moved' : 'Bed assigned', { description: `${idx.students[pick].name} → ${bed.roomId} · ${bed.label}${moving ? ` (from ${moving.roomId})` : ''}` })
+    try {
+      await post(`/hostel/beds/${bed.id}/assign`, { studentId: idx.students[pick].uuid })
+      await refreshCampus()
+      toast(moving ? 'Student moved' : 'Bed assigned', { description: `${idx.students[pick].name} → ${bed.roomId} · ${bed.label}${moving ? ` (from ${moving.roomId})` : ''}` })
+    } catch (err) {
+      toast(err.message, { type: 'error' })
+    }
     setAssign(null); setPick('')
   }
 
@@ -131,7 +138,7 @@ function Rooms() {
         {!residents.length && <p className="mt-2 text-[13px] text-ink-muted">{t("No hostel residents. Mark a student as a hostel resident on their profile first.")}</p>}
       </Modal>
       <ConfirmDialog open={!!vacate} onClose={() => setVacate(null)} title={t("Vacate this bed?")} confirmLabel={t("Vacate bed")} tone="danger"
-        onConfirm={() => { dispatch({ type: 'VACATE_BED', bedId: vacate.id }); toast('Bed vacated', { description: `${vacate.roomId} · ${vacate.label}` }) }}>
+        onConfirm={() => post(`/hostel/beds/${vacate.id}/release`, { reason: 'Vacated from the hostel screen' }).then(refreshCampus).then(() => toast('Bed vacated', { description: `${vacate.roomId} · ${vacate.label}` }), (err) => toast(err.message, { type: 'error' }))}>
         {vacate && <>{idx.students[vacate.studentId]?.name} {t("will be removed from")} {vacate.roomId} · {vacate.label} {t("and listed as awaiting a bed.")} <Link to={`/students/${vacate.studentId}?tab=hostel`} className="font-semibold text-primary-700 underline">{t("View profile")}</Link></>}
       </ConfirmDialog>
     </div>
@@ -164,17 +171,27 @@ function Residents() {
 }
 
 function RollCall({ alerts }) {
-  const { state, idx, dispatch, today } = useStore()
+  const { state, idx, today } = useStore()
+  const { refreshCampus } = useAuth()
   const toast = useToast()
   const [date, setDate] = useState(today)
   const residents = state.beds.filter((b) => b.studentId).map((b) => idx.students[b.studentId]).filter(Boolean)
   const [draft, setDraft] = useState({})
   useEffect(() => setDraft(Object.fromEntries(residents.map((s) => [s.id, state.hostelAttendance[date]?.[s.id] || null]))), [date, state.hostelAttendance]) // eslint-disable-line react-hooks/exhaustive-deps
   const missing = residents.filter((s) => !draft[s.id]).length
-  const save = () => {
+  const save = async (reason) => {
     if (missing) return toast(`${missing} residents not marked`, { type: 'error' })
-    dispatch({ type: 'SAVE_HOSTEL_ATTENDANCE', date, statuses: draft })
-    toast('Roll call saved', { description: fmtDay(date) })
+    try {
+      await post('/hostel/roll-call', { date, entries: residents.map((s) => ({ studentId: s.uuid, status: draft[s.id].toUpperCase() })), ...(reason ? { reason } : {}) })
+      await refreshCampus()
+      toast('Roll call saved', { description: fmtDay(date) })
+    } catch (err) {
+      if (err.code === 'REASON_REQUIRED') {
+        const r = window.prompt(t('You are changing an earlier night. Why?'))
+        if (r && r.trim().length >= 3) return save(r.trim())
+      }
+      toast(err.message, { type: 'error' })
+    }
   }
   const OPTS = { present: 'border-primary-600 bg-primary-600 text-white', absent: 'border-clay-500 bg-clay-500 text-white', leave: 'border-slateblue-500 bg-slateblue-500 text-white' }
   return (

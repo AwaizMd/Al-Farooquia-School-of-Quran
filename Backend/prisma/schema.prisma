@@ -395,6 +395,8 @@ model Student {
   invoices        Invoice[]
   payments        Payment[]
   paymentAttempts PaymentAttempt[]
+  bedAssignments  BedAssignment[]
+  hostelRoll      HostelRollEntry[]
 
   @@index([groupId, status])
   @@index([name])
@@ -933,6 +935,124 @@ model Concession {
 
   @@index([studentId])
   @@map("concessions")
+}
+
+// ---------------------------------------------------------------------------
+// Hostel
+// ---------------------------------------------------------------------------
+
+model HostelRoom {
+  id     String      @id @default(uuid()) @db.Uuid
+  code   String      @unique
+  block  String
+  floor  String
+  active Boolean     @default(true)
+  beds   HostelBed[]
+
+  @@map("hostel_rooms")
+}
+
+model HostelBed {
+  id          String          @id @default(uuid()) @db.Uuid
+  roomId      String          @db.Uuid
+  label       String
+  active      Boolean         @default(true)
+  room        HostelRoom      @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignments BedAssignment[]
+
+  @@unique([roomId, label])
+  @@map("hostel_beds")
+}
+
+/// Who sleeps where, with history. Partial unique indexes (migration) allow one
+/// open assignment per bed and per student, so a bed can never be double-booked.
+model BedAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  bedId        String    @db.Uuid
+  studentId    String    @db.Uuid
+  startedAt    DateTime  @default(now()) @db.Timestamptz(3)
+  endedAt      DateTime? @db.Timestamptz(3)
+  assignedById String?   @db.Uuid
+  endReason    String?
+  bed          HostelBed @relation(fields: [bedId], references: [id], onDelete: Restrict)
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([bedId])
+  @@map("bed_assignments")
+}
+
+enum HostelRollStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+}
+
+/// Night roll call: one mark per resident per date.
+model HostelRollEntry {
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @db.Uuid
+  date       DateTime         @db.Date
+  status     HostelRollStatus
+  note       String?
+  markedById String?          @db.Uuid
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(3)
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, date])
+  @@index([date])
+  @@map("hostel_roll_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Digital library
+// ---------------------------------------------------------------------------
+
+enum LibraryAudience {
+  ALL_STUDENTS
+  HIFZ
+  ALIM
+  STAFF_ONLY
+}
+
+enum ResourceStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model LibraryResource {
+  id           String          @id @default(uuid()) @db.Uuid
+  title        String
+  category     String
+  type         String
+  author       String?
+  description  String?
+  pages        Int?            @db.SmallInt
+  audience     LibraryAudience @default(ALL_STUDENTS)
+  status       ResourceStatus  @default(ACTIVE)
+  fileId       String?         @unique @db.Uuid
+  uploadedById String?         @db.Uuid
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+  file         StoredFile?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([status, category])
+  @@map("library_resources")
+}
+
+/// File metadata. The bytes live in private storage under `storageKey` (never the uploaded name).
+model StoredFile {
+  id           String           @id @default(uuid()) @db.Uuid
+  storageKey   String           @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  uploadedById String?          @db.Uuid
+  createdAt    DateTime         @default(now()) @db.Timestamptz(3)
+  resource     LibraryResource?
+
+  @@map("stored_files")
 }
 
 // ---------------------------------------------------------------------------

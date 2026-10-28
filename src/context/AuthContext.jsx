@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { get, onSessionLost, post, setCsrfToken } from '../api/client'
-import { loadActivity, loadExams, loadFees, loadInbox, loadPeople } from '../api/people'
+import { loadActivity, loadCampus, loadExams, loadFees, loadInbox, loadPeople } from '../api/people'
 import { useStore } from './DemoStore'
 
 const AuthContext = createContext(null)
@@ -50,12 +50,13 @@ export function AuthProvider({ children }) {
   const refreshPeople = useCallback(async () => {
     setPeople((p) => ({ ...p, status: p.status === 'ready' ? 'ready' : 'loading' }))
     try {
-      const [people, activity, exams, fees, inbox] = await Promise.all([loadPeople(session.user), loadActivity(), loadExams(), loadFees(), loadInbox()])
+      const [people, activity, exams, fees, inbox, campus] = await Promise.all([loadPeople(session.user), loadActivity(), loadExams(), loadFees(), loadInbox(), loadCampus(session.user)])
       dispatch({ type: 'HYDRATE_PEOPLE', ...people })
       dispatch({ type: 'HYDRATE_ACTIVITY', ...activity })
       dispatch({ type: 'HYDRATE_EXAMS', ...exams })
       dispatch({ type: 'HYDRATE_FEES', ...fees })
       dispatch({ type: 'HYDRATE_INBOX', ...inbox })
+      dispatch({ type: 'HYDRATE_CAMPUS', ...campus })
       setPeople({ status: 'ready', error: null })
     } catch (err) {
       setPeople({ status: 'error', error: err })
@@ -88,6 +89,7 @@ export function AuthProvider({ children }) {
     refreshExams: () => loadExams().then((exams) => dispatch({ type: 'HYDRATE_EXAMS', ...exams })),
     refreshFees: () => loadFees().then((fees) => dispatch({ type: 'HYDRATE_FEES', ...fees })),
     refreshInbox: () => loadInbox().then((inbox) => dispatch({ type: 'HYDRATE_INBOX', ...inbox })),
+    refreshCampus: () => loadCampus(session.user).then((campus) => dispatch({ type: 'HYDRATE_CAMPUS', ...campus })),
     login: (identifier, password) => post('/auth/login', { identifier, password }).then(apply),
     verifyMfa: (code) => post('/auth/mfa/verify', { code }).then(apply),
     signInWithRecoveryCode: (code) => post('/auth/mfa/recovery-code', { code }).then(apply),

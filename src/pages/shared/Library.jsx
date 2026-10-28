@@ -3,19 +3,22 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { BookOpen, FileText, Headphones, NotebookPen, FileSpreadsheet, Upload, Download, Eye, Lock, Info, Library as LibIcon } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { api, post } from '../../api/client'
+import { AUDIENCE_CODE } from '../../api/people'
 import { useToast } from '../../context/ToastContext'
 import { useQueryState } from '../../hooks/useQueryState'
 import { useActiveChild } from '../../hooks/useScope'
 import { PageHeader, Card, SearchInput, Select, Button, Modal, Input, Textarea, Badge, EmptyState, Notice, Stagger, staggerItem, cx, StarMotif } from '../../components/ui'
 import { RESOURCE_CATEGORIES, RESOURCE_TYPES } from '../../constants/labels'
 import { fmtDate } from '../../utils/date'
-import { uid } from '../../utils/format'
 
 const TYPE_ICON = { 'PDF Book': BookOpen, 'Study Notes': NotebookPen, 'Tajweed Guide': FileText, Worksheet: FileSpreadsheet, 'Audio Guide': Headphones }
 const CAT_TONE = { Hifz: 'bg-primary-700', Nazira: 'bg-primary-500', Tajweed: 'bg-gold-600', Arabic: 'bg-slateblue-500', 'Islamic Studies': 'bg-forest', 'General Learning': 'bg-sage-400' }
-const sessionFiles = new Map() // object URLs for files uploaded in this browser session only
 
+// The server decides who may open each item (canOpen); this mirrors it only for older cached items.
 function canAccess(r, role, student) {
+  if (typeof r.canOpen === 'boolean') return r.canOpen
   if (role === 'admin' || role === 'mentor') return true
   if (r.access === 'Staff only') return false
   if (r.access === 'All students') return true
@@ -42,7 +45,7 @@ export default function Library() {
   return (
     <div>
       <PageHeader title={t("Digital Library")} subtitle={t("Books, notes and Tajweed guides for students and mentors")}
-        actions={(role === 'admin' || role === 'mentor') && <Button icon={Upload} onClick={() => setUpload(true)}>{t("Add resource")}</Button>} />
+        actions={(state.session.persona === 'admin' || role === 'mentor') && <Button icon={Upload} onClick={() => setUpload(true)}>{t("Add resource")}</Button>} />
       <Notice tone="gold" icon={Info} className="mb-4">{t("All titles are fictional samples. Two sample PDFs are included; other items show a description only.")}</Notice>
       <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_200px]">
         <SearchInput value={q} onChange={setQ} placeholder={t("Search title, author or topic")} />
@@ -77,7 +80,7 @@ export default function Library() {
                   <p className="mt-2 line-clamp-2 text-[13px] text-ink-soft">{r.description}</p>
                   <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
                     <Badge>{r.type}</Badge>
-                    {r.file || sessionFiles.has(r.id) ? <Badge tone="green">{t("Sample file")}</Badge> : <Badge tone="neutral">{t("Description only")}</Badge>}
+                    {r.file ? <Badge tone="green">{t(r.mimeType?.startsWith('audio') ? "Audio" : "PDF")}</Badge> : <Badge tone="neutral">{t("Description only")}</Badge>}
                     {!ok && <Badge tone="red" icon={Lock}>{r.access}</Badge>}
                   </div>
                 </div>
@@ -95,11 +98,11 @@ export default function Library() {
 
 function ResourceDetail({ resource: r, onClose, canOpen }) {
   if (!r) return null
-  const url = r.file || sessionFiles.get(r.id)
+  const url = r.file
   return (
     <Modal open={!!r} onClose={onClose} title={r.title} subtitle={`${r.category} · ${r.type}`}
       footer={canOpen && url ? (
-        <><Button variant="secondary" icon={Eye} href={url} target="_blank" rel="noopener noreferrer">{t("Preview")}</Button><Button icon={Download} href={url} download>{t("Download")}</Button></>
+        <>{r.mimeType === 'application/pdf' && <Button variant="secondary" icon={Eye} href={`${url}?inline=1`} target="_blank" rel="noopener noreferrer">{t("Preview")}</Button>}<Button icon={Download} href={url}>{t("Download")}</Button></>
       ) : <Button variant="secondary" onClick={onClose}>{t("Close")}</Button>}>
       <dl className="grid grid-cols-2 gap-3 text-[13.5px]">
         {[['Author / source', r.author], ['Uploaded', fmtDate(r.uploaded)], ['Access', r.access], ['Length', r.pages ? `${r.pages} pages` : '—']].map(([k, v]) => (
@@ -108,35 +111,43 @@ function ResourceDetail({ resource: r, onClose, canOpen }) {
       </dl>
       <p className="mt-4 text-[14px] text-ink-soft">{r.description}</p>
       {!canOpen && <Notice tone="red" icon={Lock} className="mt-4">{t("This resource is restricted to:")} {r.access}.</Notice>}
-      {canOpen && !url && <Notice tone="gold" icon={Info} className="mt-4">{r.localFile ? `The file "${r.localFile}" was attached in an earlier session. Uploaded files are not stored permanently in this static demo.` : 'No file is bundled for this sample item. In production, the PDF or audio would be stored securely and streamed here.'}</Notice>}
+      {canOpen && !url && <Notice tone="gold" icon={Info} className="mt-4">{t("No file has been uploaded for this item yet.")}</Notice>}
     </Modal>
   )
 }
 
 function UploadModal({ open, onClose }) {
-  const { dispatch, today } = useStore()
+  const { refreshCampus } = useAuth()
+  const [saving, setSaving] = useState(false)
   const toast = useToast()
   const [f, setF] = useState({ title: '', category: 'Tajweed', type: 'Study Notes', author: '', access: 'All students', description: '' })
   const [file, setFile] = useState(null)
   const [errors, setErrors] = useState({})
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
-  const submit = () => {
+  const submit = async () => {
     const e = {}
     if (f.title.trim().length < 4) e.title = 'Enter a title (at least 4 characters).'
     if (!f.author.trim()) e.author = 'Enter the author or source.'
-    if (file && file.size > 15 * 1024 * 1024) e.file = 'Files over 15 MB are not supported in the demo.'
+    if (file && file.size > 15 * 1024 * 1024) e.file = 'Files must be 15 MB or smaller.'
+    if (file && !['application/pdf', 'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/x-m4a'].includes(file.type)) e.file = 'Upload a PDF or an audio file (MP3, M4A, OGG or WAV).'
     setErrors(e)
     if (Object.keys(e).length) return
-    const id = uid('L')
-    if (file) sessionFiles.set(id, URL.createObjectURL(file))
-    dispatch({ type: 'ADD_RESOURCE', resource: { id, ...f, title: f.title.trim(), author: f.author.trim(), uploaded: today, uploadedBy: 'You', pages: null, localFile: file?.name || null } })
-    toast('Resource added', { description: file ? 'File available until this tab is closed.' : 'Saved without a file.' })
-    setF({ title: '', category: 'Tajweed', type: 'Study Notes', author: '', access: 'All students', description: '' }); setFile(null)
-    onClose()
+    setSaving(true)
+    try {
+      const r = await post('/library', { title: f.title.trim(), category: f.category, type: f.type, author: f.author.trim(), ...(f.description.trim() ? { description: f.description.trim() } : {}), audience: AUDIENCE_CODE[f.access] })
+      if (file) await uploadFile(r.id, file)
+      await refreshCampus()
+      toast('Resource added', { description: file ? 'The file is stored securely.' : 'Saved without a file.' })
+      setF({ title: '', category: 'Tajweed', type: 'Study Notes', author: '', access: 'All students', description: '' }); setFile(null)
+      onClose()
+    } catch (err) {
+      setErrors({ file: err.message })
+    } finally {
+      setSaving(false)
+    }
   }
   return (
-    <Modal open={open} onClose={onClose} title={t("Add library resource")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={Upload} onClick={submit}>{t("Add resource")}</Button></>}>
-      <Notice tone="gold" icon={Info} className="mb-4">{t("Static demo limitation: the resource details are saved in this browser, but the attached file itself is kept only until the tab is closed. Production would use secure file storage.")}</Notice>
+    <Modal open={open} onClose={onClose} title={t("Add library resource")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={Upload} onClick={submit} loading={saving}>{t("Add resource")}</Button></>}>
       <div className="grid gap-3.5 sm:grid-cols-2">
         <Input className="sm:col-span-2" label={t("Title")} required value={f.title} onChange={set('title')} error={errors.title} />
         <Select label={t("Category")} value={f.category} onChange={set('category')} options={RESOURCE_CATEGORIES} />
@@ -152,4 +163,14 @@ function UploadModal({ open, onClose }) {
       </div>
     </Modal>
   )
+}
+
+/** Sends the file's raw bytes; the server checks its type by content and stores it privately. */
+async function uploadFile(id, file) {
+  const type = file.type === 'audio/x-m4a' ? 'audio/mp4' : file.type
+  const res = await fetch(`/api/v1/library/${id}/file`, {
+    method: 'PUT', body: file, credentials: 'same-origin',
+    headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(file.name), 'X-CSRF-Token': (await api('/auth/session')).csrfToken },
+  })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || 'The upload failed.')
 }

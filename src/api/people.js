@@ -145,3 +145,25 @@ export async function loadInbox() {
     settings: { brandName: settings.brandName, shortName: settings.shortName, brandArabic: settings.brandArabic, tagline: settings.tagline, address: settings.address, phone: settings.phone, email: settings.email, currency: settings.currency, weeklyOff: settings.weeklyOff, feeDueDay: settings.feeDueDay },
   }
 }
+
+const AUDIENCE_LABEL = { ALL_STUDENTS: 'All students', HIFZ: 'Hifz groups', ALIM: 'Alimiyyah', STAFF_ONLY: 'Staff only' }
+export const AUDIENCE_CODE = Object.fromEntries(Object.entries(AUDIENCE_LABEL).map(([k, v]) => [v, k]))
+
+/** Library catalogue; hostel rooms, beds and roll calls only for accounts that may see them. */
+export async function loadCampus(user) {
+  const canSeeHostel = user?.roles?.some((r) => r === 'ADMIN' || r === 'PRINCIPAL' || r === 'WARDEN')
+  const [library, hostel, roll] = await Promise.all([
+    get('/library'),
+    canSeeHostel ? get('/hostel') : Promise.resolve(null),
+    canSeeHostel ? get('/hostel/roll-call') : Promise.resolve(null),
+  ])
+  return {
+    library: library.items.map((r) => ({
+      id: r.id, title: r.title, category: r.category, type: r.type, author: r.author ?? '', description: r.description ?? '', pages: r.pages, uploaded: r.uploadedAt.slice(0, 10), uploadedBy: r.uploadedBy,
+      access: AUDIENCE_LABEL[r.audience], canOpen: r.canOpen, file: r.file ? `/api/v1/library/${r.id}/file` : null, fileName: r.file?.name ?? null, mimeType: r.file?.mimeType ?? null,
+    })),
+    rooms: hostel ? hostel.rooms.map((r) => ({ id: r.code, uuid: r.id, block: r.block, floor: r.floor, beds: r.beds.length })) : [],
+    beds: hostel ? hostel.rooms.flatMap((r) => r.beds.map((b) => ({ id: b.id, roomId: r.code, label: b.label, studentId: b.occupant?.admissionNo ?? null }))) : [],
+    hostelAttendance: roll ? roll.days : {},
+  }
+}

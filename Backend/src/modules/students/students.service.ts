@@ -5,6 +5,7 @@ import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
 import { prisma } from '../../database/prisma.js'
 import { ACCESS_INCLUDE, accessLevel, studentScope, type AccessLevel } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
+import { releaseIfNotResident } from '../hostel/hostel.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -199,6 +200,8 @@ export async function updateStudent(req: Request, ref: string, patch: StudentPat
       await tx.groupEnrollment.create({ data: { studentId: row.id, groupId: group.id, startedOn: today } })
     }
     if (Object.keys(data).length) await tx.student.update({ where: { id: row.id }, data })
+    // Leaving the hostel (or the Madarsa) frees the student's bed.
+    if (data.hostelResident !== undefined || data.status !== undefined) await releaseIfNotResident(tx, row.id)
 
     if (patch.concession !== undefined) {
       const open = row.concessions[0]

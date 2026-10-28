@@ -70,7 +70,7 @@ describe('role policy', () => {
   })
   it('combines permissions for multi-role accounts', () => {
     expect(permissionsFor(['MENTOR', 'ADMIN']).has('mfa.reset')).toBe(true)
-    expect(permissionsFor(['PARENT', 'WARDEN']).size).toBe(0)
+    expect([...permissionsFor(['PARENT', 'WARDEN'])].sort()).toEqual(['hostel.manage', 'hostel.read'])
   })
   it('uses staff timeouts when any role is staff', () => {
     expect(timeoutsFor('FULL', ['PARENT'])).toEqual({ idleSec: 86400, absoluteSec: 30 * 86400 })

@@ -75,6 +75,9 @@ export function fakeFetch(personaName) {
       const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
       return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
     }
+    if (path === '/library') return json({ items: [{ id: 'l1', title: 'Madd rules', category: 'Tajweed', type: 'Tajweed Guide', author: 'x', description: 'x', pages: 3, audience: 'ALL_STUDENTS', status: 'ACTIVE', uploadedAt: new Date().toISOString(), uploadedBy: 'Office', file: { name: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 10 }, canOpen: true }] })
+    if (path === '/hostel') return json({ rooms: [{ id: 'r1', code: 'R-101', block: 'Bilal Block', floor: 'Ground', beds: [{ id: 'b1', label: 'Bed A', occupant: students.find((x) => x.hostelResident) }, { id: 'b2', label: 'Bed B', occupant: null }] }], unassigned: [] })
+    if (path === '/hostel/roll-call') return json({ from: '', to: '', days: demo.hostelAttendance })
     if (path === '/notifications') return json({ items: [{ id: 'n1', title: 'Welcome', body: 'Hello', link: null, createdAt: new Date().toISOString(), readAt: null, category: 'GENERAL' }] })
     if (path === '/settings') return json({ brandName: 'Al Farooquia School of Quran', shortName: 'Al Farooquia', brandArabic: 'x', tagline: 'Madarsa Management System', address: 'x', phone: 'x', email: 'office@farooquia.demo', currency: 'INR', weeklyOff: 5, feeDueDay: 10 })
     if (path.startsWith('/reminders/')) return json(path === '/reminders/template' ? { subject: 'S', body: 'B {student} {balance}' } : { items: [] })

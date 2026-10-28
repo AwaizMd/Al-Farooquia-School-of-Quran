@@ -2,7 +2,7 @@
 import { prisma } from '../src/database/prisma.js'
 import type { Role } from '../src/generated/prisma/enums.js'
 import { hashPassword } from '../src/modules/auth/password.js'
-import { linkDevAccounts, seedActivity, seedExams, seedFees, seedPeople } from './seed-people.js'
+import { linkDevAccounts, seedActivity, seedCampus, seedExams, seedFees, seedPeople } from './seed-people.js'
 import { institutionToday } from '../src/common/clock.js'
 
 if (process.env.NODE_ENV === 'production') {
@@ -55,6 +55,7 @@ await linkDevAccounts(prisma)
 console.log(`Activity: ${await seedActivity(prisma, await institutionToday())}`)
 console.log(`Exams: ${await seedExams(prisma, await institutionToday())}`)
 console.log(`Fees: ${await seedFees(prisma, await institutionToday())}`)
+console.log(`Campus: ${await seedCampus(prisma, await institutionToday())}`)
 
 console.log(`Seed complete. Dev accounts (password "${DEV_PASSWORD}"): ${accounts.map((a) => a.email ?? a.username).join(', ')}`)
 await prisma.$disconnect()

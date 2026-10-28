@@ -5,8 +5,10 @@ import { safeEqual } from '../common/crypto.js'
 import { AppError, forbidden, unauthenticated } from '../common/errors.js'
 import { permissionsFor, type Permission } from '../modules/auth/permissions.js'
 import { SESSION_COOKIE, findActiveSession } from '../modules/auth/session.service.js'
+import { UPLOAD_TYPES } from '../modules/library/library.service.js'
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+const RAW_UPLOAD_PATH = /^\/library\/[0-9a-f-]{36}\/file$/i
 
 /** Attach req.auth when a valid session cookie is present. Never rejects on its own. */
 export const loadSession: RequestHandler = async (req, _res, next) => {
@@ -36,7 +38,9 @@ export const csrfProtection: RequestHandler = (req, _res, next) => {
   const origin = req.get('origin')
   if (origin && !env.CORS_ORIGINS.includes(origin)) return next(forbidden('Cross-site request blocked.'))
   const hasBody = Number(req.get('content-length') ?? 0) > 0 || req.get('transfer-encoding') !== undefined
-  if (hasBody && !req.is('application/json')) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Requests must be sent as JSON.'))
+  // The one exception: raw library uploads (still need the CSRF token below, which forms cannot send).
+  const rawUpload = req.method === 'PUT' && RAW_UPLOAD_PATH.test(req.path) && req.is(UPLOAD_TYPES)
+  if (hasBody && !req.is('application/json') && !rawUpload) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Requests must be sent as JSON.'))
   if (req.auth) {
     const sent = req.get('x-csrf-token')
     if (!sent || !safeEqual(sent, req.auth.session.csrfToken)) return next(new AppError(403, 'CSRF_FAILED', 'Your session token is missing or out of date. Refresh and try again.'))

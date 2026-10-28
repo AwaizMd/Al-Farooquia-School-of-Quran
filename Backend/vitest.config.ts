@@ -19,6 +19,8 @@ export default defineConfig({
       MFA_ACTIVE_KEY_VERSION: '2',
       PAYMENT_PROVIDER: 'dev',
       DEV_PAYMENT_WEBHOOK_SECRET: 'test-webhook-secret-0123456789',
+      STORAGE_DIR: '.local/storage-test',
+      UPLOAD_MAX_MB: '1',
     },
     // Integration tests share one database, so files run one at a time.
     fileParallelism: false,
