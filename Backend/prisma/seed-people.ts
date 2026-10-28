@@ -65,6 +65,42 @@ export async function seedPeople(prisma: PrismaClient) {
   return `${people.STUDENT_SEEDS.length} students, ${people.PARENTS.length} guardians, ${people.MENTORS.length + 2} staff`
 }
 
+/**
+ * Development only: the demo generator's last 30 school days of attendance and
+ * lesson records, relative to `today`, so dashboards have realistic history.
+ */
+export async function seedActivity(prisma: PrismaClient, today: string) {
+  if ((await prisma.attendanceRecord.count()) > 0) return 'activity already present, skipped'
+  const gen = await load('generate.js')
+  const demo = gen.generateSeed(today)
+  const students = Object.fromEntries((await prisma.student.findMany({ select: { id: true, admissionNo: true, groupId: true } })).map((s) => [s.admissionNo, s]))
+  const staff = Object.fromEntries((await prisma.staffProfile.findMany({ select: { id: true, code: true } })).map((s) => [s.code, s.id]))
+
+  let marks = 0
+  for (const [date, statuses] of Object.entries(demo.attendance as Record<string, Record<string, string>>)) {
+    const byGroup = new Map<string, [string, string][]>()
+    for (const [code, status] of Object.entries(statuses)) {
+      const s = students[code]
+      if (!s) continue
+      if (!byGroup.has(s.groupId)) byGroup.set(s.groupId, [])
+      byGroup.get(s.groupId)!.push([s.id, status])
+    }
+    for (const [groupId, rows] of byGroup) {
+      const session = await prisma.attendanceSession.create({ data: { groupId, date: d(date) } })
+      await prisma.attendanceRecord.createMany({ data: rows.map(([studentId, status]) => ({ sessionId: session.id, studentId, date: d(date), status: status.toUpperCase() as 'PRESENT' })) })
+      marks += rows.length
+    }
+  }
+  const lessons = (demo.sabaq as Any[]).filter((r) => students[r.studentId]).map((r) => ({
+    studentId: students[r.studentId]!.id, mentorId: staff[r.mentorId] ?? null, date: d(r.date), createdAt: new Date(`${r.createdAt}+05:30`),
+    category: r.category.toUpperCase(), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, qaidaLesson: r.qaidaLesson,
+    performance: r.performance, mistakes: Math.min(99, r.mistakes), fluency: r.fluency, tajweed: r.tajweed.toUpperCase(), prevRevision: r.prevRevision.toUpperCase(),
+    revisionQuality: r.revisionQuality, targetStatus: r.targetStatus.toUpperCase(), comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp,
+  }))
+  await prisma.learningRecord.createMany({ data: lessons })
+  return `${marks} attendance marks, ${lessons.length} lesson records`
+}
+
 /** Link the dev sign-in accounts to their people records. */
 export async function linkDevAccounts(prisma: PrismaClient) {
   const link = async (email: string | null, username: string | null, kind: 'staff' | 'guardian' | 'student', code: string) => {

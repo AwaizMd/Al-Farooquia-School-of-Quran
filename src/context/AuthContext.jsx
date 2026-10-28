@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { get, onSessionLost, post, setCsrfToken } from '../api/client'
-import { loadPeople } from '../api/people'
+import { loadActivity, loadPeople } from '../api/people'
 import { useStore } from './DemoStore'
 
 const AuthContext = createContext(null)
@@ -50,7 +50,9 @@ export function AuthProvider({ children }) {
   const refreshPeople = useCallback(async () => {
     setPeople((p) => ({ ...p, status: p.status === 'ready' ? 'ready' : 'loading' }))
     try {
-      dispatch({ type: 'HYDRATE_PEOPLE', ...(await loadPeople(session.user)) })
+      const [people, activity] = await Promise.all([loadPeople(session.user), loadActivity()])
+      dispatch({ type: 'HYDRATE_PEOPLE', ...people })
+      dispatch({ type: 'HYDRATE_ACTIVITY', ...activity })
       setPeople({ status: 'ready', error: null })
     } catch (err) {
       setPeople({ status: 'error', error: err })
@@ -78,6 +80,8 @@ export function AuthProvider({ children }) {
     apply,
     refresh,
     refreshPeople,
+    // Reload attendance and lesson records only (after saving one of them).
+    refreshActivity: () => loadActivity().then((activity) => dispatch({ type: 'HYDRATE_ACTIVITY', ...activity })),
     login: (identifier, password) => post('/auth/login', { identifier, password }).then(apply),
     verifyMfa: (code) => post('/auth/mfa/verify', { code }).then(apply),
     signInWithRecoveryCode: (code) => post('/auth/mfa/recovery-code', { code }).then(apply),

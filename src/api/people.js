@@ -76,3 +76,29 @@ export async function loadPeople(user) {
     feePlans: plans.map((p) => ({ id: p.code, uuid: p.id, name: p.name, amount: p.amountMinor / 100, cycle: p.cycle === 'MONTHLY' ? 'Monthly' : p.cycle, covers: p.covers ?? '' })),
   }
 }
+
+const lower = (v) => (typeof v === 'string' ? v.toLowerCase() : v)
+
+/** API lesson record -> the shape the Sabaq screens use. */
+export const toLesson = (r) => ({
+  id: r.id, uuid: r.id, studentId: r.admissionNo, mentorId: r.mentor?.code ?? null, date: r.date, createdAt: r.createdAt,
+  category: lower(r.category), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, qaidaLesson: r.qaidaLesson,
+  performance: r.performance, mistakes: r.mistakes, fluency: r.fluency, tajweed: lower(r.tajweed), prevRevision: lower(r.prevRevision),
+  revisionQuality: r.revisionQuality, targetStatus: lower(r.targetStatus), comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp, edited: r.edited,
+})
+
+/** Attendance (last 60 days) and lesson records (last 90 days) the account may see. */
+export async function loadActivity() {
+  const [attendance, lessons] = await Promise.all([
+    get('/attendance'),
+    (async () => {
+      const items = []
+      for (let page = 1; ; page++) {
+        const r = await get(`/learning-records?page=${page}&pageSize=1000`)
+        items.push(...r.items)
+        if (items.length >= r.total || r.items.length === 0) return items
+      }
+    })(),
+  ])
+  return { attendance: attendance.days, today: attendance.today, sabaq: lessons.map(toLesson) }
+}

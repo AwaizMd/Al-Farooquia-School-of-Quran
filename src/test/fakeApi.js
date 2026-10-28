@@ -2,6 +2,10 @@
 // people, returning the same shapes as the real API. Used by smoke tests only.
 import { GROUPS, MENTORS, PARENTS, STUDENT_SEEDS, CONCESSIONS } from '../data/people'
 import { FEE_PLANS, planForSeed } from '../data/catalog'
+import { generateSeed } from '../data/generate'
+import { todayISO } from '../utils/date'
+
+const demo = generateSeed(todayISO())
 
 const KIND = { 'Sibling concession': 'SIBLING', 'Need-based concession': 'NEED_BASED', 'Full sponsorship (Yateem fund)': 'FULL_SPONSORSHIP' }
 const uuid = (code) => `00000000-0000-4000-8000-${[...code].reduce((a, c) => a * 31 + c.charCodeAt(0), 7).toString(16).slice(-12).padStart(12, '0')}`
@@ -52,6 +56,16 @@ export function fakeFetch(personaName) {
     if (path === '/staff') return json({ items: staff })
     if (path === '/fee-plans') return json({ items: plans })
     if (path === '/guardians') return json({ total: guardians.length, page: 1, pageSize: 500, items: guardians })
+    if (path === '/attendance') {
+      const codes = new Set(mine.map((s) => s.admissionNo))
+      const days = Object.fromEntries(Object.entries(demo.attendance).map(([d, m]) => [d, Object.fromEntries(Object.entries(m).filter(([c]) => codes.has(c)))]))
+      return json({ from: '', to: '', today: todayISO(), days, sessions: [] })
+    }
+    if (path === '/learning-records') {
+      const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((s) => s.admissionNo))
+      const items = demo.sabaq.filter((r) => codes.has(r.studentId)).map((r) => ({ ...r, admissionNo: r.studentId, mentor: { code: r.mentorId }, category: r.category.toUpperCase(), tajweed: r.tajweed.toUpperCase(), prevRevision: r.prevRevision.toUpperCase(), targetStatus: r.targetStatus.toUpperCase() }))
+      return json({ total: items.length, page: 1, pageSize: 1000, items })
+    }
     if (path === '/auth/sessions') return json({ items: [] })
     if (path === '/admin/users') return json({ total: 0, page: 1, pageSize: 100, items: [] })
     return json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404)

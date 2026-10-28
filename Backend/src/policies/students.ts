@@ -33,6 +33,15 @@ export function studentScope(auth: AuthContext): Prisma.StudentWhereInput | null
   return or.length ? { OR: or } : null
 }
 
+/** Students whose academic records (learning, assessments) the caller may see: wardens' hostel access does not extend to these. */
+export function academicScope(auth: AuthContext): Prisma.StudentWhereInput | null {
+  if (auth.permissions.has('students.read')) return {}
+  return studentScope({ ...auth, roles: auth.roles.filter((r) => r !== 'WARDEN') })
+}
+
+/** Halqas the caller currently teaches (as an active mentor). */
+export const taughtGroupsWhere = (userId: string): Prisma.GroupWhereInput => ({ mentors: { some: { endedAt: null, staff: { userId, status: 'ACTIVE' } } } })
+
 /** The highest level any of the caller's roles grants for this student (null = none). */
 export function accessLevel(auth: AuthContext, s: WithAccess): AccessLevel | null {
   if (auth.permissions.has('students.read')) return 'full'

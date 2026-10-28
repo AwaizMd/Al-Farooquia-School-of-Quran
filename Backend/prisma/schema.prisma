@@ -2,10 +2,10 @@
 // Every schema change goes through `npm run db:migrate`; never edit applied migrations.
 
 generator client {
-  provider               = "prisma-client"
-  output                 = "../src/generated/prisma"
-  moduleFormat           = "esm"
-  importFileExtension    = "js"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
 }
 
 datasource db {
@@ -77,16 +77,16 @@ model User {
   createdAt          DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime   @updatedAt @db.Timestamptz(3)
 
-  roles           UserRole[]
-  sessions        Session[]
-  tokens          AuthToken[]
-  mfaCredentials  MfaCredential[]
-  recoveryCodes   RecoveryCode[]
-  recoveryRequests MfaRecoveryRequest[] @relation("RecoveryFor")
+  roles             UserRole[]
+  sessions          Session[]
+  tokens            AuthToken[]
+  mfaCredentials    MfaCredential[]
+  recoveryCodes     RecoveryCode[]
+  recoveryRequests  MfaRecoveryRequest[] @relation("RecoveryFor")
   recoveryInitiated MfaRecoveryRequest[] @relation("RecoveryInitiatedBy")
-  staffProfile    StaffProfile?
-  guardianProfile Guardian?
-  studentProfile  Student?
+  staffProfile      StaffProfile?
+  guardianProfile   Guardian?
+  studentProfile    Student?
 
   @@map("users")
 }
@@ -272,21 +272,22 @@ enum GroupGender {
 
 /// A halqa / class.
 model Group {
-  id          String      @id @default(uuid()) @db.Uuid
+  id        String      @id @default(uuid()) @db.Uuid
   /// Stable human-readable reference, e.g. "g-hifz-a".
-  code        String      @unique
-  name        String
-  short       String
-  track       Track
-  room        String?
-  timing      String?
-  gender      GroupGender
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  code      String      @unique
+  name      String
+  short     String
+  track     Track
+  room      String?
+  timing    String?
+  gender    GroupGender
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
 
-  students    Student[]
-  mentors     GroupMentorAssignment[]
-  enrollments GroupEnrollment[]
+  students           Student[]
+  mentors            GroupMentorAssignment[]
+  enrollments        GroupEnrollment[]
+  attendanceSessions AttendanceSession[]
 
   @@map("groups")
 }
@@ -313,7 +314,8 @@ model StaffProfile {
   updatedAt      DateTime    @updatedAt @db.Timestamptz(3)
   user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  assignments    GroupMentorAssignment[]
+  assignments     GroupMentorAssignment[]
+  learningRecords LearningRecord[]
 
   @@map("staff_profiles")
 }
@@ -335,18 +337,18 @@ model GroupMentorAssignment {
 }
 
 model Guardian {
-  id          String            @id @default(uuid()) @db.Uuid
-  code        String            @unique
-  userId      String?           @unique @db.Uuid
-  name        String
-  relation    String
-  phone       String
-  email       String?
-  occupation  String?
-  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
-  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  students    StudentGuardian[]
+  id         String            @id @default(uuid()) @db.Uuid
+  code       String            @unique
+  userId     String?           @unique @db.Uuid
+  name       String
+  relation   String
+  phone      String
+  email      String?
+  occupation String?
+  createdAt  DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime          @updatedAt @db.Timestamptz(3)
+  user       User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  students   StudentGuardian[]
 
   @@index([phone])
   @@map("guardians")
@@ -359,30 +361,32 @@ enum StudentStatus {
 }
 
 model Student {
-  id             String            @id @default(uuid()) @db.Uuid
+  id              String             @id @default(uuid()) @db.Uuid
   /// Institution-assigned, unique, never reused. Also the student's sign-in name.
-  admissionNo    String            @unique
-  userId         String?           @unique @db.Uuid
-  name           String
-  gender         Gender
-  dob            DateTime          @db.Date
-  admissionDate  DateTime          @db.Date
-  status         StudentStatus     @default(ACTIVE)
-  groupId        String            @db.Uuid
-  phone          String
-  address        String?
-  hostelResident Boolean           @default(false)
-  bloodGroup     String?
-  medicalNotes   String?
-  feePlanId      String?           @db.Uuid
-  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime          @updatedAt @db.Timestamptz(3)
-  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  group          Group             @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  feePlan        FeePlan?          @relation(fields: [feePlanId], references: [id], onDelete: Restrict)
-  guardians      StudentGuardian[]
-  enrollments    GroupEnrollment[]
-  concessions    Concession[]
+  admissionNo     String             @unique
+  userId          String?            @unique @db.Uuid
+  name            String
+  gender          Gender
+  dob             DateTime           @db.Date
+  admissionDate   DateTime           @db.Date
+  status          StudentStatus      @default(ACTIVE)
+  groupId         String             @db.Uuid
+  phone           String
+  address         String?
+  hostelResident  Boolean            @default(false)
+  bloodGroup      String?
+  medicalNotes    String?
+  feePlanId       String?            @db.Uuid
+  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  group           Group              @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  feePlan         FeePlan?           @relation(fields: [feePlanId], references: [id], onDelete: Restrict)
+  guardians       StudentGuardian[]
+  enrollments     GroupEnrollment[]
+  concessions     Concession[]
+  attendance      AttendanceRecord[]
+  learningRecords LearningRecord[]
 
   @@index([groupId, status])
   @@index([name])
@@ -390,15 +394,15 @@ model Student {
 }
 
 model StudentGuardian {
-  studentId              String   @db.Uuid
-  guardianId             String   @db.Uuid
-  isPrimary              Boolean  @default(false)
-  canViewFees            Boolean  @default(true)
-  canPay                 Boolean  @default(true)
-  receivesNotifications  Boolean  @default(true)
-  linkedAt               DateTime @default(now()) @db.Timestamptz(3)
-  student                Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  guardian               Guardian @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+  studentId             String   @db.Uuid
+  guardianId            String   @db.Uuid
+  isPrimary             Boolean  @default(false)
+  canViewFees           Boolean  @default(true)
+  canPay                Boolean  @default(true)
+  receivesNotifications Boolean  @default(true)
+  linkedAt              DateTime @default(now()) @db.Timestamptz(3)
+  student               Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian              Guardian @relation(fields: [guardianId], references: [id], onDelete: Restrict)
 
   @@id([studentId, guardianId])
   @@index([guardianId])
@@ -417,6 +421,147 @@ model GroupEnrollment {
 
   @@index([studentId])
   @@map("group_enrollments")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  EXCUSED
+}
+
+/// One register per halqa per day. A day with no session has simply not been marked yet.
+model AttendanceSession {
+  id         String             @id @default(uuid()) @db.Uuid
+  groupId    String             @db.Uuid
+  date       DateTime           @db.Date
+  markedById String?            @db.Uuid
+  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime           @updatedAt @db.Timestamptz(3)
+  group      Group              @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  records    AttendanceRecord[]
+
+  @@unique([groupId, date])
+  @@index([date])
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id          String                 @id @default(uuid()) @db.Uuid
+  sessionId   String                 @db.Uuid
+  studentId   String                 @db.Uuid
+  /// Copied from the session so a student can never be marked twice on one day.
+  date        DateTime               @db.Date
+  status      AttendanceStatus
+  note        String?
+  markedById  String?                @db.Uuid
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
+  session     AttendanceSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student     Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  corrections AttendanceCorrection[]
+
+  @@unique([studentId, date])
+  @@unique([sessionId, studentId])
+  @@map("attendance_records")
+}
+
+/// Every change to a saved status, with who, when and (after the day) why.
+model AttendanceCorrection {
+  id            String           @id @default(uuid()) @db.Uuid
+  recordId      String           @db.Uuid
+  fromStatus    AttendanceStatus
+  toStatus      AttendanceStatus
+  reason        String?
+  correctedById String?          @db.Uuid
+  at            DateTime         @default(now()) @db.Timestamptz(3)
+  record        AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([recordId])
+  @@map("attendance_corrections")
+}
+
+// ---------------------------------------------------------------------------
+// Learning progress (Sabaq, Sabqi, Manzil, Nazira, Qaida)
+// ---------------------------------------------------------------------------
+
+enum LearningCategory {
+  SABAQ
+  SABQI
+  MANZIL
+  NAZIRA
+  QAIDA
+}
+
+enum TajweedQuality {
+  GOOD
+  FAIR
+  WEAK
+}
+
+enum RevisionDone {
+  DONE
+  PARTIAL
+  NOT
+}
+
+enum TargetStatus {
+  MET
+  PARTIAL
+  MISSED
+}
+
+/// One lesson assessment. Records are never overwritten: edits keep a revision.
+model LearningRecord {
+  id              String                   @id @default(uuid()) @db.Uuid
+  studentId       String                   @db.Uuid
+  /// Mentor who taught the lesson (null if recorded by administration).
+  mentorId        String?                  @db.Uuid
+  recordedById    String?                  @db.Uuid
+  date            DateTime                 @db.Date
+  category        LearningCategory
+  surah           Int?                     @db.SmallInt
+  fromAyah        Int?                     @db.SmallInt
+  toAyah          Int?                     @db.SmallInt
+  juz             Int?                     @db.SmallInt
+  qaidaLesson     Int?                     @db.SmallInt
+  /// 1 (needs a lot of support) … 5 (excellent)
+  performance     Int                      @db.SmallInt
+  mistakes        Int                      @db.SmallInt
+  fluency         Int                      @db.SmallInt
+  tajweed         TajweedQuality
+  prevRevision    RevisionDone
+  revisionQuality Int?                     @db.SmallInt
+  targetStatus    TargetStatus
+  comments        String
+  nextTarget      String
+  followUp        Boolean                  @default(false)
+  createdAt       DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @db.Timestamptz(3)
+  student         Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mentor          StaffProfile?            @relation(fields: [mentorId], references: [id], onDelete: SetNull)
+  revisions       LearningRecordRevision[]
+
+  @@index([studentId, date(sort: Desc)])
+  @@index([date])
+  @@map("learning_records")
+}
+
+model LearningRecordRevision {
+  id         String         @id @default(uuid()) @db.Uuid
+  recordId   String         @db.Uuid
+  /// The record as it was before this edit.
+  previous   Json
+  reason     String?
+  editedById String?        @db.Uuid
+  at         DateTime       @default(now()) @db.Timestamptz(3)
+  record     LearningRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([recordId])
+  @@map("learning_record_revisions")
 }
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ export default tseslint.config(
   },
   {
     files: ['scripts/**', 'prisma/seed.ts'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
     rules: { 'no-console': 'off' },
   },
 )

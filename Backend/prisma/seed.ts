@@ -2,7 +2,8 @@
 import { prisma } from '../src/database/prisma.js'
 import type { Role } from '../src/generated/prisma/enums.js'
 import { hashPassword } from '../src/modules/auth/password.js'
-import { linkDevAccounts, seedPeople } from './seed-people.js'
+import { linkDevAccounts, seedActivity, seedPeople } from './seed-people.js'
+import { institutionToday } from '../src/common/clock.js'
 
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to seed a production database.')
@@ -51,6 +52,7 @@ for (const a of accounts) {
 
 console.log(`People: ${await seedPeople(prisma)}`)
 await linkDevAccounts(prisma)
+console.log(`Activity: ${await seedActivity(prisma, await institutionToday())}`)
 
 console.log(`Seed complete. Dev accounts (password "${DEV_PASSWORD}"): ${accounts.map((a) => a.email ?? a.username).join(', ')}`)
 await prisma.$disconnect()

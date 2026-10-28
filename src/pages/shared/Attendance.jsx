@@ -3,10 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCheck, Save, AlertTriangle, CalendarDays, Users, Download } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { useQueryState } from '../../hooks/useQueryState'
 import { useVisibleStudents } from '../../hooks/useScope'
-import { PageHeader, Card, CardHeader, Tabs, Input, Select, Button, Avatar, EmptyState, Notice, cx, LinkRow } from '../../components/ui'
+import { PageHeader, Card, CardHeader, Tabs, Input, Select, Button, Avatar, EmptyState, Notice, cx, LinkRow, Modal, Textarea } from '../../components/ui'
 import { AttendanceBadge } from '../../components/cards/StatusBadges'
 import { ChartCard, AttendanceRateLine } from '../../components/charts/Charts'
 import { attendanceCounts, repeatedAbsences, mentorGroups, latestSchoolDay } from '../../services/selectors'
@@ -165,7 +167,11 @@ function Overview() {
 }
 
 function MarkAttendance() {
-  const { state, idx, dispatch, today } = useStore()
+  const { state, idx, today } = useStore()
+  const { refreshActivity } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [askReason, setAskReason] = useState(false)
+  const [reason, setReason] = useState('')
   const toast = useToast()
   const role = state.session.role
   const groups = role === 'admin' ? state.groups : mentorGroups(state, state.session.userId)
@@ -181,12 +187,26 @@ function MarkAttendance() {
   const missing = students.filter((s) => !draft[s.id]).length
   const isOff = weekday(date) === state.settings.weeklyOff
 
-  const save = () => {
+  const save = async (withReason) => {
     if (date > today) return toast('Attendance cannot be marked for a future date', { type: 'error' })
     if (missing) return toast(`${missing} student${missing > 1 ? 's are' : ' is'} not marked yet`, { type: 'error', description: 'Choose a status for every student, or use "All present".' })
-    const statuses = Object.fromEntries(students.map((s) => [s.id, draft[s.id]]))
-    dispatch({ type: 'SAVE_ATTENDANCE', date, statuses, label: idx.groups[group].name })
-    toast('Attendance saved', { description: `${idx.groups[group].name} · ${fmtDay(date)}` })
+    setSaving(true)
+    try {
+      await post('/attendance', {
+        groupId: idx.groups[group].uuid, date,
+        records: students.map((s) => ({ studentId: s.uuid, status: draft[s.id].toUpperCase() })),
+        ...(withReason ? { reason: withReason } : {}),
+      })
+      await refreshActivity()
+      setAskReason(false)
+      setReason('')
+      toast('Attendance saved', { description: `${idx.groups[group].name} · ${fmtDay(date)}` })
+    } catch (err) {
+      if (err.code === 'REASON_REQUIRED') setAskReason(true)
+      else toast(err.message, { type: 'error' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!groups.length) return <Card><EmptyState title={t("No halqa assigned")}>{t("Ask the administrator to assign you a halqa.")}</EmptyState></Card>
@@ -232,7 +252,11 @@ function MarkAttendance() {
       <div className="fixed inset-x-0 bottom-[60px] z-30 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <div className="mx-auto flex max-w-6xl items-center gap-3 lg:justify-end">
           <p className="flex-1 text-[12.5px] text-ink-muted lg:flex-none">{missing ? t('{n} not marked', { n: missing }) : dirty ? t('Unsaved changes') : t('Up to date')}</p>
-          <Button icon={Save} onClick={save} disabled={!dirty && !missing}>{t("Save attendance")}</Button>
+          <Button icon={Save} onClick={() => save()} loading={saving} disabled={!dirty && !missing}>{t("Save attendance")}</Button>
+          <Modal open={askReason} onClose={() => setAskReason(false)} size="sm" title="Correcting an earlier day" subtitle="Changes to past attendance are kept in the record with a reason."
+            footer={<><Button variant="secondary" onClick={() => setAskReason(false)}>{t("Cancel")}</Button><Button loading={saving} disabled={reason.trim().length < 3} onClick={() => save(reason.trim())}>{t("Save correction")}</Button></>}>
+            <Textarea label={t("Reason")} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("e.g. Medical certificate received")} />
+          </Modal>
         </div>
       </div>
     </div>

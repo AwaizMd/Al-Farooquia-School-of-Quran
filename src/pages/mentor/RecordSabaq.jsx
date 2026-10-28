@@ -4,6 +4,9 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BookOpenCheck, Minus, Plus, Save, CheckCircle2, ArrowRight, AlertTriangle, Sparkles, History } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post } from '../../api/client'
+import { toLesson } from '../../api/people'
 import { useToast } from '../../context/ToastContext'
 import { useVisibleStudents } from '../../hooks/useScope'
 import { PageHeader, Card, CardHeader, Avatar, Select, Input, Textarea, Segmented, Rating, Button, Notice, SearchInput, cx, Badge } from '../../components/ui'
@@ -11,7 +14,6 @@ import { SURAHS, surahByNumber, juzOf, validAyahRange, QAIDA_LESSONS, rangeLabel
 import { SABAQ_CATEGORIES, RATINGS, TAJWEED, PREV_REVISION, TARGET_STATUS } from '../../constants/labels'
 import { recordsFor, sabaqToday, isMain } from '../../services/selectors'
 import { todayISO, fmtDay } from '../../utils/date'
-import { uid } from '../../utils/format'
 
 const QUICK_NOTES = ['Improve fluency and revise today\'s lesson.', 'Revise three times before tomorrow.', 'Pay attention to madd and ghunnah.', 'Excellent — keep this pace.', 'Read slowly with the Mushaf before memorising.']
 
@@ -58,7 +60,9 @@ const nextTargetText = (category, f) => {
 const blank = (date) => ({ date, surah: '', fromAyah: '', toAyah: '', qaidaLesson: 1, prevRevision: 'done', performance: 0, mistakes: 0, fluency: 0, tajweed: '', revisionQuality: 0, targetStatus: 'met', comments: '', nextTarget: '', followUp: false })
 
 export default function RecordSabaq() {
-  const { state, idx, dispatch, today } = useStore()
+  const { state, idx, today } = useStore()
+  const { refreshActivity } = useAuth()
+  const [saving, setSaving] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -121,19 +125,29 @@ export default function RecordSabaq() {
     return Object.keys(e).length === 0
   }
 
-  const save = () => {
+  const save = async () => {
+    if (saving) return
     if (!validate()) { toast('Some details are missing', { type: 'error', description: 'Check the highlighted fields.' }); return }
-    const record = {
-      id: uid('SB'), studentId: student.id, mentorId: idx.groups[student.groupId]?.mentorId, date: f.date, createdAt: new Date().toISOString(), category,
-      surah: usesAyah ? Number(f.surah) : null, fromAyah: usesAyah ? Number(f.fromAyah) : null, toAyah: usesAyah ? Number(f.toAyah) : null,
-      juz: usesAyah ? juz : null, qaidaLesson: usesAyah ? null : Number(f.qaidaLesson),
-      performance: f.performance, mistakes: Number(f.mistakes), fluency: f.fluency, tajweed: f.tajweed, prevRevision: f.prevRevision,
-      revisionQuality: f.revisionQuality || null, targetStatus: f.targetStatus, comments: f.comments.trim(), nextTarget: nextTarget.trim(), followUp: f.followUp,
+    const body = {
+      studentId: student.uuid, date: f.date, category: category.toUpperCase(),
+      ...(usesAyah ? { surah: Number(f.surah), fromAyah: Number(f.fromAyah), toAyah: Number(f.toAyah) } : { qaidaLesson: Number(f.qaidaLesson) }),
+      performance: f.performance, mistakes: Number(f.mistakes), fluency: f.fluency, tajweed: f.tajweed.toUpperCase(), prevRevision: f.prevRevision.toUpperCase(),
+      revisionQuality: f.revisionQuality || null, targetStatus: f.targetStatus.toUpperCase(), comments: f.comments.trim(), nextTarget: nextTarget.trim(), followUp: f.followUp,
     }
-    const summary = `${SABAQ_CATEGORIES[category].short}: ${rangeLabel(record)} · ${RATINGS[f.performance].label}`
-    dispatch({ type: 'ADD_SABAQ', record, summary })
-    toast('Sabaq saved', { description: `${student.name} · ${rangeLabel(record)}` })
-    setSaved({ record, student })
+    setSaving(true)
+    try {
+      const res = await post('/learning-records', body)
+      const record = toLesson(res.record)
+      await refreshActivity()
+      toast('Sabaq saved', { description: `${student.name} · ${rangeLabel(record)}` })
+      setSaved({ record, student })
+    } catch (err) {
+      const fe = err.fieldErrors || {}
+      if (Object.keys(fe).length) setErrors(fe)
+      toast(err.code === 'VALIDATION_FAILED' ? 'Some details are not valid' : err.message, { type: 'error', description: Object.values(fe)[0] })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const nextPending = students.find((s) => pendingIds.has(s.id) && s.id !== saved?.student.id)
@@ -305,7 +319,7 @@ export default function RecordSabaq() {
             <div className="fixed inset-x-0 bottom-[60px] z-30 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0">
               <div className="mx-auto flex max-w-6xl gap-2 lg:justify-end">
                 <Button variant="secondary" className="flex-1 lg:flex-none" onClick={() => navigate(-1)}>{t("Cancel")}</Button>
-                <Button className="flex-[2] lg:flex-none" icon={Save} onClick={save}>{t("Save Sabaq record")}</Button>
+                <Button className="flex-[2] lg:flex-none" icon={Save} onClick={save} loading={saving}>{t("Save Sabaq record")}</Button>
               </div>
             </div>
           </div>
