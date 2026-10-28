@@ -115,3 +115,24 @@ export async function loadExams() {
     grading: grading.bands,
   }
 }
+
+export const METHOD_LABEL = { CASH: 'Cash', UPI: 'UPI', BANK_TRANSFER: 'Bank Transfer', CHEQUE: 'Cheque', ONLINE: 'Online' }
+export const METHOD_CODE = { Cash: 'CASH', UPI: 'UPI', 'Bank Transfer': 'BANK_TRANSFER', Cheque: 'CHEQUE' }
+
+/**
+ * Invoices and payments in the shapes the fee screens use (amounts in rupees).
+ * Invoice amounts are net of approved adjustments and payment rows net of
+ * refunds, so the screens' balance arithmetic matches the server exactly.
+ */
+export async function loadFees() {
+  const r = await get('/fees')
+  return {
+    invoices: r.invoices.filter((i) => i.status !== 'VOID').map((i) => ({
+      id: i.id, number: i.number, studentId: i.admissionNo, period: i.period, planId: i.plan.code, gross: i.grossMinor / 100, discount: i.discountMinor / 100,
+      adjusted: i.adjustedMinor / 100, amount: i.dueMinor / 100, issuedOn: i.issuedOn, dueDate: i.dueDate,
+    })),
+    payments: r.payments.flatMap((p) => p.allocations
+      .map((a) => ({ id: `${p.id}:${a.invoiceId}`, paymentId: p.id, receiptNo: p.receiptNo, studentId: p.admissionNo, invoiceId: a.invoiceId, amount: (a.amountMinor - a.refundedMinor) / 100, date: p.receivedOn, method: METHOD_LABEL[p.method], recordedBy: p.recordedBy, note: p.note ?? '' }))
+      .filter((x) => x.amount > 0)),
+  }
+}

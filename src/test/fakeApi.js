@@ -75,6 +75,14 @@ export function fakeFetch(personaName) {
       const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
       return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
     }
+    if (path === '/payments/config') return json({ provider: 'dev' })
+    if (path === '/fees') {
+      const ok = p.roles.some((r) => ['ADMIN', 'PRINCIPAL', 'PARENT', 'STUDENT'].includes(r))
+      const codes = new Set(ok ? mine.map((x) => x.admissionNo) : [])
+      const invoices = demo.invoices.filter((i) => codes.has(i.studentId)).map((i) => ({ id: i.id, number: i.id, admissionNo: i.studentId, period: i.period, plan: { code: i.planId }, status: 'ISSUED', grossMinor: i.gross * 100, discountMinor: i.discount * 100, amountMinor: i.amount * 100, adjustedMinor: 0, dueMinor: i.amount * 100, issuedOn: i.issuedOn, dueDate: i.dueDate }))
+      const payments = demo.payments.filter((x) => codes.has(x.studentId)).map((x) => ({ id: x.id, receiptNo: x.receiptNo, admissionNo: x.studentId, receivedOn: x.date, method: 'CASH', recordedBy: 'Office', note: null, allocations: [{ invoiceId: x.invoiceId, amountMinor: x.amount * 100, refundedMinor: 0 }] }))
+      return json({ currency: 'INR', invoices, payments })
+    }
     if (path === '/grading') return json({ version: 1, bands: demo.grading })
     if (path === '/auth/sessions') return json({ items: [] })
     if (path === '/admin/users') return json({ total: 0, page: 1, pageSize: 100, items: [] })

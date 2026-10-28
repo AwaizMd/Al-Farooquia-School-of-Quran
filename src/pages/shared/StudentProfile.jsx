@@ -181,7 +181,7 @@ export default function StudentProfile() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2"><span className="text-[13px] text-ink-muted">{t("Status")}</span><FeeBadge status={fees.status} /></div>
-            <Button icon={Receipt} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Record payment")}</Button>
+            {state.session.persona === 'admin' && <Button icon={Receipt} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Record payment")}</Button>}
           </div>
           <FeeSummary fees={fees} currency={cur} />
           <div className="grid gap-4 lg:grid-cols-2">

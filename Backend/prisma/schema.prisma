@@ -390,6 +390,9 @@ model Student {
   attendance      AttendanceRecord[]
   learningRecords LearningRecord[]
   examResults     ExamResult[]
+  invoices        Invoice[]
+  payments        Payment[]
+  paymentAttempts PaymentAttempt[]
 
   @@index([groupId, status])
   @@index([name])
@@ -695,6 +698,7 @@ model FeePlan {
   covers      String?
   active      Boolean   @default(true)
   students    Student[]
+  invoices    Invoice[]
 
   @@map("fee_plans")
 }
@@ -703,6 +707,215 @@ enum ConcessionKind {
   SIBLING
   NEED_BASED
   FULL_SPONSORSHIP
+}
+
+enum InvoiceStatus {
+  ISSUED
+  /// Cancelled before any payment; kept for the record.
+  VOID
+}
+
+/// A fee assessed for one billing period. Amounts are copied from the plan and
+/// concession when issued, so later plan changes never alter it.
+model Invoice {
+  id            String              @id @default(uuid()) @db.Uuid
+  number        String              @unique
+  studentId     String              @db.Uuid
+  /// YYYY-MM
+  period        String              @db.Char(7)
+  planId        String              @db.Uuid
+  currency      String              @db.Char(3)
+  grossMinor    Int
+  discountMinor Int
+  amountMinor   Int
+  issuedOn      DateTime            @db.Date
+  dueDate       DateTime            @db.Date
+  status        InvoiceStatus       @default(ISSUED)
+  voidReason    String?
+  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
+  student       Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  plan          FeePlan             @relation(fields: [planId], references: [id], onDelete: Restrict)
+  allocations   PaymentAllocation[]
+  adjustments   FeeAdjustment[]
+  refundParts   RefundAllocation[]
+
+  @@unique([studentId, period, planId])
+  @@index([studentId, status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  ONLINE
+}
+
+enum PaymentSource {
+  MANUAL
+  ONLINE
+}
+
+/// Money received. Confirmed payments are never edited; refunds reverse them.
+model Payment {
+  id               String              @id @default(uuid()) @db.Uuid
+  studentId        String              @db.Uuid
+  receiptId        String              @unique @db.Uuid
+  amountMinor      Int
+  /// Received but not matched to an open invoice (needs review).
+  unallocatedMinor Int                 @default(0)
+  currency         String              @db.Char(3)
+  method           PaymentMethod
+  source           PaymentSource
+  receivedOn       DateTime            @db.Date
+  recordedById     String?             @db.Uuid
+  note             String?
+  paymentAttemptId String?             @unique @db.Uuid
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  student          Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  receipt          Receipt             @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  attempt          PaymentAttempt?     @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+  allocations      PaymentAllocation[]
+  refunds          Refund[]
+
+  @@index([studentId])
+  @@index([receivedOn])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  paymentId   String  @db.Uuid
+  invoiceId   String  @db.Uuid
+  amountMinor Int
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([paymentId, invoiceId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+model Receipt {
+  id       String   @id @default(uuid()) @db.Uuid
+  /// NR-<financial year start>-<sequence>, gapless within each April–March year.
+  number   String   @unique
+  issuedAt DateTime @default(now()) @db.Timestamptz(3)
+  payment  Payment?
+
+  @@map("receipts")
+}
+
+model ReceiptSequence {
+  /// Financial year start, e.g. 2026 for April 2026 – March 2027.
+  fiscalYear Int @id
+  last       Int
+
+  @@map("receipt_sequences")
+}
+
+enum AdjustmentKind {
+  WAIVER
+  CORRECTION
+}
+
+/// Approved reduction of an invoice's amount due (positive = less to pay).
+model FeeAdjustment {
+  id           String         @id @default(uuid()) @db.Uuid
+  invoiceId    String         @db.Uuid
+  kind         AdjustmentKind
+  amountMinor  Int
+  reason       String
+  approvedById String?        @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  invoice      Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@map("fee_adjustments")
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model Refund {
+  id          String             @id @default(uuid()) @db.Uuid
+  paymentId   String             @db.Uuid
+  amountMinor Int
+  reason      String
+  status      RefundStatus
+  providerRef String?
+  createdById String?            @db.Uuid
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  payment     Payment            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  allocations RefundAllocation[]
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+/// Which invoice a refund gives back to (the balance due rises again).
+model RefundAllocation {
+  refundId    String  @db.Uuid
+  invoiceId   String  @db.Uuid
+  amountMinor Int
+  refund      Refund  @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([refundId, invoiceId])
+  @@map("refund_allocations")
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+/// An online checkout. Only a verified provider event can mark it SUCCEEDED.
+model PaymentAttempt {
+  id                String               @id @default(uuid()) @db.Uuid
+  reference         String               @unique
+  studentId         String               @db.Uuid
+  payerUserId       String               @db.Uuid
+  invoiceIds        String[]             @db.Uuid
+  amountMinor       Int
+  currency          String               @db.Char(3)
+  provider          String
+  providerOrderId   String?              @unique
+  providerPaymentId String?
+  status            PaymentAttemptStatus @default(CREATED)
+  failureReason     String?
+  expiresAt         DateTime             @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
+  student           Student              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  payment           Payment?
+
+  @@index([studentId, status])
+  @@map("payment_attempts")
+}
+
+/// Every provider callback, stored once. The unique key makes replays no-ops.
+model WebhookEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  provider       String
+  eventId        String
+  type           String
+  signatureValid Boolean
+  /// Provider payload with card/bank details removed.
+  payload        Json
+  receivedAt     DateTime  @default(now()) @db.Timestamptz(3)
+  processedAt    DateTime? @db.Timestamptz(3)
+  result         String?
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
 }
 
 /// Approved fee concession. One open row per student (partial unique index).

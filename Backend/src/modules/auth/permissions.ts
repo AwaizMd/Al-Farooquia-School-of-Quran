@@ -25,13 +25,18 @@ export const PERMISSIONS = [
   'learning.manage',
   // Schedule any exam, publish results, change the grading scale.
   'exams.manage',
+  'fees.read',
+  'fees.record',
+  'fees.invoice',
+  'fees.adjust',
+  'fees.refund',
 ] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
-  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage'],
+  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund'],
   // Approved: the Principal sees institution-wide information but not security administration.
-  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct'],
+  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read'],
   MENTOR: [],
   STUDENT: [],
   PARENT: [],

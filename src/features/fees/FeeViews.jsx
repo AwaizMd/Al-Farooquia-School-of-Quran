@@ -1,5 +1,8 @@
 import { t } from "../../i18n/I18nProvider"
 import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
+import { get, post } from '../../api/client'
+import { METHOD_CODE } from '../../api/people'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Receipt, Printer, CheckCircle2, ShieldAlert, Smartphone, CreditCard, Landmark, Loader2, Wallet } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
@@ -122,9 +125,11 @@ export function ReceiptModal({ receipt, onClose }) {
 
 // Admin: record a cash/UPI/bank payment against a student's open invoices.
 export function RecordPaymentModal({ open, onClose, studentId: initialStudent, onDone }) {
-  const { state, idx, dispatch, receiptNo } = useStore()
+  const { state, idx } = useStore()
+  const { refreshFees } = useAuth()
   const toast = useToast()
   const cur = state.settings.currency
+  const [saving, setSaving] = useState(false)
   const [studentId, setStudentId] = useState(initialStudent || '')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('Cash')
@@ -135,21 +140,28 @@ export function RecordPaymentModal({ open, onClose, studentId: initialStudent, o
   const fees = studentId ? studentFees(state, idx, studentId) : null
   const withDues = useMemo(() => state.students.filter((s) => studentFees(state, idx, s.id).balance > 0), [state, idx])
 
-  const submit = () => {
+  const submit = async () => {
     const n = Number(amount)
     if (!studentId) return setError('Choose a student.')
     if (!Number.isFinite(n) || n <= 0) return setError('Enter an amount greater than zero.')
     if (n > fees.balance) return setError(`Amount cannot exceed the outstanding balance of ${money(fees.balance, cur)}.`)
-    const no = receiptNo()
-    dispatch({ type: 'RECORD_PAYMENT', studentId, amount: Math.round(n), method, note, receiptNo: no })
-    toast('Payment recorded', { description: `${money(n, cur)} · receipt ${no}` })
-    onDone?.(no)
-    onClose()
+    setSaving(true)
+    try {
+      const p = await post('/fees/payments', { studentId: idx.students[studentId].uuid, amountMinor: Math.round(n * 100), method: METHOD_CODE[method], ...(note.trim() ? { note: note.trim() } : {}) })
+      await refreshFees()
+      toast('Payment recorded', { description: `${money(n, cur)} · receipt ${p.receiptNo}` })
+      onDone?.(p.receiptNo)
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <Modal open={open} onClose={onClose} title={t("Record fee payment")} subtitle={t("Allocated to the oldest unpaid invoices first")}
-      footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={CheckCircle2} onClick={submit}>{t("Save payment")}</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button icon={CheckCircle2} onClick={submit} loading={saving}>{t("Save payment")}</Button></>}>
       <div className="space-y-3.5">
         <Select label={t("Student")} value={studentId} onChange={(e) => { setStudentId(e.target.value); setError('') }} placeholder={t("Select a student with dues")}
           options={(initialStudent && !withDues.some((s) => s.id === initialStudent) ? [idx.students[initialStudent], ...withDues] : withDues).map((s) => ({ value: s.id, label: `${s.name} · ${s.id} · ${money(studentFees(state, idx, s.id).balance, cur)} due` }))} />
@@ -163,7 +175,7 @@ export function RecordPaymentModal({ open, onClose, studentId: initialStudent, o
           </div>
         )}
         <Input label={t("Amount received")} type="number" inputMode="numeric" min="1" value={amount} onChange={(e) => { setAmount(e.target.value); setError('') }} placeholder="0" />
-        <Select label={t("Payment method")} value={method} onChange={(e) => setMethod(e.target.value)} options={PAYMENT_METHODS.filter((m) => !m.includes('Demo'))} />
+        <Select label={t("Payment method")} value={method} onChange={(e) => setMethod(e.target.value)} options={Object.keys(METHOD_CODE)} />
         <Textarea label={t("Note (optional)")} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. paid by uncle at office" className="[&_textarea]:min-h-[64px]" />
         {error && <p className="rounded-xl bg-clay-50 px-3 py-2 text-[13px] font-medium text-clay-700" role="alert">{error}</p>}
       </div>
@@ -173,16 +185,21 @@ export function RecordPaymentModal({ open, onClose, studentId: initialStudent, o
 
 // Parent: demonstration checkout. Collects no card or bank details.
 export function CheckoutModal({ open, onClose, student, onDone }) {
-  const { state, idx, dispatch, receiptNo } = useStore()
+  const { state, idx } = useStore()
+  const { refreshFees } = useAuth()
   const cur = state.settings.currency
   const fees = student ? studentFees(state, idx, student.id) : null
   const [selected, setSelected] = useState([])
   const [method, setMethod] = useState('upi')
   const [step, setStep] = useState('select')
   const [receipt, setReceipt] = useState(null)
+  const [attempt, setAttempt] = useState(null)
+  const [error, setError] = useState('')
+  const [gateway, setGateway] = useState(undefined)
 
   useEffect(() => {
-    if (open && fees) { setSelected(fees.open.map((i) => i.id)); setStep('select'); setReceipt(null); setMethod('upi') }
+    if (open && fees) { setSelected(fees.open.map((i) => i.id)); setStep('select'); setReceipt(null); setMethod('upi'); setAttempt(null); setError('') }
+    if (open) get('/payments/config').then((c) => setGateway(c.provider), () => setGateway(null))
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!student || !fees) return null
@@ -194,27 +211,62 @@ export function CheckoutModal({ open, onClose, student, onDone }) {
     { value: 'bank', label: 'Net banking', icon: Landmark },
   ]
 
-  const pay = () => {
+  // Start the checkout: the server works out the amount from its own records.
+  const start = async () => {
+    setError('')
+    try {
+      setAttempt(await post('/payments/attempts', { studentId: student.uuid, invoiceIds: selected }))
+      setStep('confirm')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Wait for the server to receive the gateway's signed confirmation.
+  const waitForConfirmation = async (id) => {
+    for (let i = 0; i < 40; i++) {
+      const a = await get(`/payments/attempts/${id}`)
+      if (a.status === 'SUCCEEDED') return a
+      if (a.status === 'FAILED' || a.status === 'EXPIRED') throw new Error(a.failureReason === 'declined' ? 'The payment was declined. Nothing was charged.' : 'The payment did not complete.')
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    throw new Error('We have not received confirmation yet. If money was taken it will appear shortly; please do not pay again.')
+  }
+
+  const finish = async (a) => {
+    await refreshFees()
+    setReceipt({ no: a.receiptNo, total: a.amountMinor / 100 })
+    setStep('done')
+    onDone?.(a.receiptNo)
+  }
+
+  const pay = async () => {
     setStep('processing')
-    setTimeout(() => {
-      const no = receiptNo()
-      dispatch({ type: 'RECORD_PAYMENT', studentId: student.id, amount: total, invoiceIds: selected, method: 'Online (Demo)', receiptNo: no, simulated: true })
-      setReceipt({ no, total })
-      setStep('done')
-      onDone?.(no)
-    }, 1400)
+    setError('')
+    try {
+      if (attempt.checkout.kind === 'dev') {
+        // Development gateway: the server plays the gateway and sends itself a signed confirmation.
+        await post(`/payments/dev/attempts/${attempt.id}/complete`, { outcome: 'success' })
+      } else if (attempt.checkout.kind === 'razorpay') {
+        await openRazorpay(attempt.checkout, student.name)
+      }
+      await finish(await waitForConfirmation(attempt.id))
+    } catch (err) {
+      setError(err.message)
+      setStep('confirm')
+    }
   }
 
   return (
-    <Modal open={open} onClose={step === 'processing' ? undefined : onClose} title={t("Pay fees")} subtitle={t('{name} · demonstration checkout', { name: student.name })}
+    <Modal open={open} onClose={step === 'processing' ? undefined : onClose} title={t("Pay fees")} subtitle={student.name}
       footer={step === 'select' ? (
-        <><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={() => setStep('confirm')} disabled={!total}>Continue · {money(total, cur)}</Button></>
+        <><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={start} disabled={!total || !gateway}>Continue · {money(total, cur)}</Button></>
       ) : step === 'confirm' ? (
-        <><Button variant="secondary" onClick={() => setStep('select')}>{t("Back")}</Button><Button variant="gold" icon={CheckCircle2} onClick={pay}>{t("Confirm demo payment")}</Button></>
+        <><Button variant="secondary" onClick={() => setStep('select')}>{t("Back")}</Button><Button variant="gold" icon={CheckCircle2} onClick={pay}>{t(attempt?.checkout.kind === 'dev' ? 'Pay (test gateway)' : 'Pay now')}</Button></>
       ) : step === 'done' ? <Button onClick={onClose}>{t("Done")}</Button> : null}>
-      <Notice tone="gold" icon={ShieldAlert} className="mb-4">
-        <b>{t("Demonstration only.")}</b> {t('No real payment is processed and no card, UPI or bank details are requested. A real gateway would be integrated in a later phase.')}
-      </Notice>
+      {gateway === null && <Notice tone="gold" icon={ShieldAlert} className="mb-4">{t("Online payment is not available yet. Please pay at the Madarsa office.")}</Notice>}
+      {gateway === 'dev' && <Notice tone="gold" icon={ShieldAlert} className="mb-4"><b>{t("Test gateway.")}</b> {t("No real money moves. The payment is confirmed the same way a real gateway confirms it.")}</Notice>}
+      {error && <Notice tone="red" className="mb-4">{error}</Notice>}
       <AnimatePresence mode="wait">
         {step === 'select' && (
           <motion.div key="s" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
@@ -233,36 +285,50 @@ export function CheckoutModal({ open, onClose, student, onDone }) {
                 </li>
               ))}
             </ul>
-            <p className="label mt-4">{t("Payment method (simulated)")}</p>
-            <Segmented value={method} onChange={setMethod} options={METHODS} label={t("Payment method")} />
+            <p className="mt-4 text-[12.5px] text-ink-muted">{t("You choose UPI, card or net banking on the secure payment page. This app never sees your card or bank details.")}</p>
           </motion.div>
         )}
         {step === 'confirm' && (
           <motion.div key="c" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-3">
             <div className="rounded-2xl border border-line p-4">
-              <p className="text-[13px] text-ink-muted">{t("You are about to simulate a payment of")}</p>
-              <p className="mt-1 text-[28px] font-extrabold text-forest tabular">{money(total, cur)}</p>
-              <p className="text-[13px] text-ink-muted">{t("for")} {selected.length} {t("invoice")}{selected.length > 1 ? 's' : ''} {t("via")} {METHODS.find((m) => m.value === method).label} {t("(demo).")}</p>
+              <p className="text-[13px] text-ink-muted">{t("Amount to pay")}</p>
+              <p className="mt-1 text-[28px] font-extrabold text-forest tabular">{money((attempt?.amountMinor ?? 0) / 100, cur)}</p>
+              <p className="text-[13px] text-ink-muted">{t("for")} {selected.length} {t("invoice")}{selected.length > 1 ? 's' : ''} · {t("Reference")} {attempt?.reference}</p>
             </div>
-            <p className="text-[12.5px] text-ink-muted">{t("In production, this step would hand over to a licensed payment gateway. Here, confirming only updates the sample records in your browser.")}</p>
+            <p className="text-[12.5px] text-ink-muted">{t("Your fees are marked paid only when the payment gateway confirms the payment to the Madarsa.")}</p>
           </motion.div>
         )}
         {step === 'processing' && (
           <motion.div key="p" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-10 text-center">
             <Loader2 size={36} className="animate-spin text-primary-600" />
-            <p className="mt-3 font-bold text-forest">{t("Simulating payment…")}</p>
-            <p className="text-[13px] text-ink-muted">{t("No data is leaving this device.")}</p>
+            <p className="mt-3 font-bold text-forest">{t("Waiting for payment confirmation…")}</p>
+            <p className="text-[13px] text-ink-muted">{t("Please keep this window open.")}</p>
           </motion.div>
         )}
         {step === 'done' && receipt && (
           <motion.div key="d" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-6 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600"><CheckCircle2 size={34} /></span>
-            <p className="mt-3 text-[18px] font-extrabold text-forest">{t("Demo payment recorded")}</p>
+            <p className="mt-3 text-[18px] font-extrabold text-forest">{t("Payment received")}</p>
             <p className="text-[13.5px] text-ink-muted">{money(receipt.total, cur)} · Receipt {receipt.no}</p>
-            <p className="mt-3 max-w-xs text-[12.5px] text-ink-muted">{t("The outstanding balance, payment history, admin fee reports and reminders have all been updated.")}</p>
+            <p className="mt-3 max-w-xs text-[12.5px] text-ink-muted">{t("Confirmed by the payment gateway. Your balance and receipts are updated.")}</p>
           </motion.div>
         )}
       </AnimatePresence>
     </Modal>
   )
+}
+
+// Opens Razorpay's hosted checkout. Resolves when the customer finishes; the
+// payment still counts only after the server receives Razorpay's signed webhook.
+function openRazorpay(checkout, name) {
+  return new Promise((resolve, reject) => {
+    const launch = () => {
+      const rzp = new window.Razorpay({ key: checkout.keyId, order_id: checkout.orderId, amount: checkout.amount, currency: checkout.currency, name, description: checkout.description, handler: () => resolve(), modal: { ondismiss: () => reject(new Error('Payment was cancelled.')) } })
+      rzp.on('payment.failed', () => reject(new Error('The payment was declined. Nothing was charged.')))
+      rzp.open()
+    }
+    if (window.Razorpay) return launch()
+    const s = Object.assign(document.createElement('script'), { src: 'https://checkout.razorpay.com/v1/checkout.js', onload: launch, onerror: () => reject(new Error('Could not load the payment page. Check your connection.')) })
+    document.body.appendChild(s)
+  })
 }

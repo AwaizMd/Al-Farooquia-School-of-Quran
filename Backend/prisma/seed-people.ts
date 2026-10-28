@@ -133,6 +133,39 @@ export async function seedExams(prisma: PrismaClient, today: string) {
   return `${n} exams`
 }
 
+/** Development only: four months of demo invoices and payments, with receipts in the real numbering. */
+export async function seedFees(prisma: PrismaClient, today: string) {
+  if ((await prisma.invoice.count()) > 0) return 'fees already present, skipped'
+  const demo = (await load('generate.js')).generateSeed(today)
+  const students = Object.fromEntries((await prisma.student.findMany({ select: { id: true, admissionNo: true } })).map((x) => [x.admissionNo, x.id]))
+  const plans = Object.fromEntries((await prisma.feePlan.findMany()).map((p) => [p.code, p.id]))
+  const invoiceIds: Record<string, string> = {}
+  for (const i of demo.invoices as Any[]) {
+    if (!students[i.studentId]) continue
+    const row = await prisma.invoice.create({ data: { number: `INV-${i.period.replace('-', '')}-${i.studentId}`, studentId: students[i.studentId]!, period: i.period, planId: plans[i.planId]!, currency: 'INR', grossMinor: i.gross * 100, discountMinor: i.discount * 100, amountMinor: i.amount * 100, issuedOn: d(i.issuedOn), dueDate: d(i.dueDate) } })
+    invoiceIds[i.id] = row.id
+  }
+  const METHOD: Record<string, 'CASH' | 'UPI' | 'BANK_TRANSFER'> = { Cash: 'CASH', UPI: 'UPI', 'Bank Transfer': 'BANK_TRANSFER' }
+  const byReceipt = new Map<string, Any[]>()
+  for (const p of demo.payments as Any[]) if (invoiceIds[p.invoiceId]) (byReceipt.get(p.receiptNo) ?? byReceipt.set(p.receiptNo, []).get(p.receiptNo)!).push(p)
+  const counters: Record<number, number> = {}
+  const groups = [...byReceipt.values()].sort((a, b) => a[0]!.date.localeCompare(b[0]!.date))
+  for (const rows of groups) {
+    const first = rows[0]!
+    const fy = Number(first.date.slice(5, 7)) >= 4 ? Number(first.date.slice(0, 4)) : Number(first.date.slice(0, 4)) - 1
+    counters[fy] = (counters[fy] ?? 0) + 1
+    const receipt = await prisma.receipt.create({ data: { number: `NR-${fy}-${String(counters[fy]).padStart(4, '0')}` } })
+    await prisma.payment.create({
+      data: {
+        studentId: students[first.studentId]!, receiptId: receipt.id, amountMinor: rows.reduce((a: number, r: Any) => a + r.amount * 100, 0), currency: 'INR', method: METHOD[first.method] ?? 'CASH', source: 'MANUAL', receivedOn: d(first.date), note: 'Imported demo history',
+        allocations: { create: rows.map((r: Any) => ({ invoiceId: invoiceIds[r.invoiceId]!, amountMinor: r.amount * 100 })) },
+      },
+    })
+  }
+  for (const [fy, last] of Object.entries(counters)) await prisma.receiptSequence.upsert({ where: { fiscalYear: Number(fy) }, update: { last }, create: { fiscalYear: Number(fy), last } })
+  return `${Object.keys(invoiceIds).length} invoices, ${groups.length} payments`
+}
+
 /** Link the dev sign-in accounts to their people records. */
 export async function linkDevAccounts(prisma: PrismaClient) {
   const link = async (email: string | null, username: string | null, kind: 'staff' | 'guardian' | 'student', code: string) => {

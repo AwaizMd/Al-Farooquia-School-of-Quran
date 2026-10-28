@@ -6,6 +6,8 @@ import { requireAuth, requirePermission } from '../../middleware/auth.js'
 import { body, query } from '../../middleware/validate.js'
 import * as students from './students.service.js'
 import * as staff from '../staff/staff.service.js'
+import { issueInvoices } from '../fees/fees.service.js'
+import { institutionToday } from '../../common/clock.js'
 
 export const peopleRouter = Router()
 
@@ -51,7 +53,10 @@ peopleRouter.get('/students/:ref', requireAuth, async (req, res) => {
 
 doc('post', '/students', T, 'Admit a student', { body: CreateStudent, auth: 'students.write (+ concessions.manage for a concession)' })
 peopleRouter.post('/students', requireAuth, requirePermission('students.write'), async (req, res) => {
-  res.status(201).json(await students.createStudent(req, body(req, CreateStudent)))
+  const created = await students.createStudent(req, body(req, CreateStudent))
+  // Approved rule: a new admission is billed for the current month in full (no pro-rating).
+  await issueInvoices(req, (await institutionToday()).slice(0, 7), created.id)
+  res.status(201).json(created)
 })
 
 doc('patch', '/students/:ref', T, 'Update a student record', { body: UpdateStudent, auth: 'students.write' })

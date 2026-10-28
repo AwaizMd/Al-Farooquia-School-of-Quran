@@ -32,7 +32,7 @@ function MyFees() {
   return (
     <div>
       <PageHeader title={isParent ? 'Fees & Payments' : 'My Fees'} subtitle={`${child.name} · ${t(plan?.name)}`}
-        actions={isParent && <Button variant="gold" icon={CreditCard} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Pay fees (demo)")}</Button>} />
+        actions={isParent && <Button variant="gold" icon={CreditCard} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Pay fees")}</Button>} />
       <ChildSwitcher className="mb-4" />
       <div className="space-y-4">
         <FeeSummary fees={fees} currency={cur} />
@@ -68,7 +68,7 @@ function AdminFees() {
   return (
     <div>
       <PageHeader title={t("Fee management")} subtitle={t("Plans, dues, collections and receipts")}
-        actions={<><Button variant="secondary" icon={BellRing} to="/reminders">{t("Reminders")}</Button><Button icon={Receipt} onClick={() => openPay()}>{t("Record payment")}</Button></>} />
+        actions={<><Button variant="secondary" icon={BellRing} to="/reminders">{t("Reminders")}</Button>{state.session.persona === 'admin' && <Button icon={Receipt} onClick={() => openPay()}>{t("Record payment")}</Button>}</>} />
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Stat label={t("Collected this month")} value={money(totals.collectedThisMonth, cur)} icon={TrendingUp} tone="green" />
         <Stat label={t("Billed this month")} value={money(totals.billedThisMonth, cur)} sub={t('{pct}% collected', { pct: pct(totals.collectedThisMonth, totals.billedThisMonth) })} icon={Wallet} tone="gold" />

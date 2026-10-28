@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { get, onSessionLost, post, setCsrfToken } from '../api/client'
-import { loadActivity, loadExams, loadPeople } from '../api/people'
+import { loadActivity, loadExams, loadFees, loadPeople } from '../api/people'
 import { useStore } from './DemoStore'
 
 const AuthContext = createContext(null)
@@ -50,10 +50,11 @@ export function AuthProvider({ children }) {
   const refreshPeople = useCallback(async () => {
     setPeople((p) => ({ ...p, status: p.status === 'ready' ? 'ready' : 'loading' }))
     try {
-      const [people, activity, exams] = await Promise.all([loadPeople(session.user), loadActivity(), loadExams()])
+      const [people, activity, exams, fees] = await Promise.all([loadPeople(session.user), loadActivity(), loadExams(), loadFees()])
       dispatch({ type: 'HYDRATE_PEOPLE', ...people })
       dispatch({ type: 'HYDRATE_ACTIVITY', ...activity })
       dispatch({ type: 'HYDRATE_EXAMS', ...exams })
+      dispatch({ type: 'HYDRATE_FEES', ...fees })
       setPeople({ status: 'ready', error: null })
     } catch (err) {
       setPeople({ status: 'error', error: err })
@@ -84,6 +85,7 @@ export function AuthProvider({ children }) {
     // Reload attendance and lesson records only (after saving one of them).
     refreshActivity: () => loadActivity().then((activity) => dispatch({ type: 'HYDRATE_ACTIVITY', ...activity })),
     refreshExams: () => loadExams().then((exams) => dispatch({ type: 'HYDRATE_EXAMS', ...exams })),
+    refreshFees: () => loadFees().then((fees) => dispatch({ type: 'HYDRATE_FEES', ...fees })),
     login: (identifier, password) => post('/auth/login', { identifier, password }).then(apply),
     verifyMfa: (code) => post('/auth/mfa/verify', { code }).then(apply),
     signInWithRecoveryCode: (code) => post('/auth/mfa/recovery-code', { code }).then(apply),

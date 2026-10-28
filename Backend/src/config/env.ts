@@ -60,6 +60,13 @@ const schema = z.object({
   MAIL_TRANSPORT: z.enum(['file', 'smtp']).default('file'),
   SMTP_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
   MAIL_FROM: z.string().min(3).default('Al Farooquia MMS <no-reply@farooquia.demo>'),
+
+  // Online fee payment: none (off), dev (local simulator, never in production) or razorpay.
+  PAYMENT_PROVIDER: z.enum(['none', 'dev', 'razorpay']).default('none'),
+  DEV_PAYMENT_WEBHOOK_SECRET: z.string().min(16).default('dev-only-webhook-secret-change-me'),
+  RAZORPAY_KEY_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  RAZORPAY_KEY_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  RAZORPAY_WEBHOOK_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
 })
 
 export type Env = z.infer<typeof schema>
@@ -76,6 +83,10 @@ function load(): Env {
     if (env.CORS_ORIGINS.length === 0) throw new Error('CORS_ORIGINS must be set in production')
     if (!env.COOKIE_SECURE) throw new Error('COOKIE_SECURE cannot be false in production')
     if (env.MAIL_TRANSPORT !== 'smtp' || !env.SMTP_URL) throw new Error('Production requires MAIL_TRANSPORT=smtp and SMTP_URL')
+  }
+  if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'dev') throw new Error('PAYMENT_PROVIDER=dev is not allowed in production')
+  if (env.PAYMENT_PROVIDER === 'razorpay' && !(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_WEBHOOK_SECRET)) {
+    throw new Error('PAYMENT_PROVIDER=razorpay needs RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET')
   }
   if (!env.MFA_ENCRYPTION_KEYS.has(env.MFA_ACTIVE_KEY_VERSION)) {
     throw new Error('MFA_ACTIVE_KEY_VERSION does not match any key in MFA_ENCRYPTION_KEYS')

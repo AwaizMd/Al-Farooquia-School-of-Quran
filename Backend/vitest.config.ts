@@ -17,6 +17,8 @@ export default defineConfig({
       TOKEN_HMAC_KEY: Buffer.alloc(32, 7).toString('base64'),
       MFA_ENCRYPTION_KEYS: `1:${Buffer.alloc(32, 1).toString('base64')},2:${Buffer.alloc(32, 2).toString('base64')}`,
       MFA_ACTIVE_KEY_VERSION: '2',
+      PAYMENT_PROVIDER: 'dev',
+      DEV_PAYMENT_WEBHOOK_SECRET: 'test-webhook-secret-0123456789',
     },
     // Integration tests share one database, so files run one at a time.
     fileParallelism: false,
