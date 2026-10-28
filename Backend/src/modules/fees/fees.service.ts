@@ -6,6 +6,7 @@ import { addDaysIso, institutionToday } from '../../common/clock.js'
 import { prisma } from '../../database/prisma.js'
 import type { AuthContext } from '../../types/express.js'
 import { audit } from '../audit-logs/audit.service.js'
+import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 
 type Tx = Prisma.TransactionClient
@@ -178,6 +179,7 @@ export async function recordManualPayment(req: Request, input: { studentId: stri
   if (!student) throw notFound()
   const payment = await prisma.$transaction(async (tx) => {
     const p = await receive(tx, { ...input, receivedOn, source: 'MANUAL', recordedById: req.auth!.user.id }, today)
+    await notifyStudentFamily(tx, student.id, { category: 'FEES', title: `Payment received for ${student.name.split(' ')[0]}`, body: `Receipt ${p.receipt.number} · ${(p.amountMinor / 100).toFixed(2)} ${p.currency} · ${input.method.replace('_', ' ').toLowerCase()}`, link: '/fees' }, { fees: true })
     await audit({ action: 'fees.payment_recorded', summary: `Receipt ${p.receipt.number} · ${input.method} · ${(p.amountMinor / 100).toFixed(2)} ${p.currency}`, entityType: 'student', entityId: student.id, metadata: { paymentId: p.id, allocations: p.allocations.map((a) => ({ invoice: a.invoice.number, amountMinor: a.amountMinor })) } }, req, tx)
     return p
   })

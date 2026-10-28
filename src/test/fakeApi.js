@@ -75,6 +75,12 @@ export function fakeFetch(personaName) {
       const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
       return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
     }
+    if (path === '/notifications') return json({ items: [{ id: 'n1', title: 'Welcome', body: 'Hello', link: null, createdAt: new Date().toISOString(), readAt: null, category: 'GENERAL' }] })
+    if (path === '/settings') return json({ brandName: 'Al Farooquia School of Quran', shortName: 'Al Farooquia', brandArabic: 'x', tagline: 'Madarsa Management System', address: 'x', phone: 'x', email: 'office@farooquia.demo', currency: 'INR', weeklyOff: 5, feeDueDay: 10 })
+    if (path.startsWith('/reminders/')) return json(path === '/reminders/template' ? { subject: 'S', body: 'B {student} {balance}' } : { items: [] })
+    if (path === '/scheduled-reports/config') return json({ enabled: true, frequency: 'MONTHLY', dayOfWeek: 6, dayOfMonth: 1, sendAt: '09:00', channels: ['EMAIL'], sections: ['attendance'] })
+    if (path === '/scheduled-reports/runs') return json({ items: [] })
+    if (path === '/admin/jobs') return json({ jobs: [], deliveries: {} })
     if (path === '/payments/config') return json({ provider: 'dev' })
     if (path === '/fees') {
       const ok = p.roles.some((r) => ['ADMIN', 'PRINCIPAL', 'PARENT', 'STUDENT'].includes(r))

@@ -82,11 +82,13 @@ model User {
   tokens            AuthToken[]
   mfaCredentials    MfaCredential[]
   recoveryCodes     RecoveryCode[]
-  recoveryRequests  MfaRecoveryRequest[] @relation("RecoveryFor")
-  recoveryInitiated MfaRecoveryRequest[] @relation("RecoveryInitiatedBy")
+  recoveryRequests  MfaRecoveryRequest[]     @relation("RecoveryFor")
+  recoveryInitiated MfaRecoveryRequest[]     @relation("RecoveryInitiatedBy")
   staffProfile      StaffProfile?
   guardianProfile   Guardian?
   studentProfile    Student?
+  notifications     Notification[]
+  notificationPrefs NotificationPreference[]
 
   @@map("users")
 }
@@ -931,6 +933,170 @@ model Concession {
 
   @@index([studentId])
   @@map("concessions")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, reminders, scheduled reports, job status
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum NotificationCategory {
+  FEES
+  PROGRESS
+  ATTENDANCE
+  RESULTS
+  GENERAL
+}
+
+/// In-app notification for one signed-in account.
+model Notification {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @db.Uuid
+  category  NotificationCategory
+  title     String
+  body      String
+  link      String?
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+  readAt    DateTime?            @db.Timestamptz(3)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// Opt-outs (in-app and email default on) and opt-ins with consent (WhatsApp, SMS).
+model NotificationPreference {
+  userId    String               @db.Uuid
+  channel   NotificationChannel
+  category  NotificationCategory
+  enabled   Boolean
+  consentAt DateTime?            @db.Timestamptz(3)
+  updatedAt DateTime             @updatedAt @db.Timestamptz(3)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channel, category])
+  @@map("notification_preferences")
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  FAILED
+  /// Deliberately not sent (no consent, channel not configured, no longer relevant).
+  SKIPPED
+}
+
+/// One outbound message. `dedupeKey` makes every scheduled message unique.
+model NotificationDelivery {
+  id                String               @id @default(uuid()) @db.Uuid
+  dedupeKey         String               @unique
+  userId            String?              @db.Uuid
+  guardianId        String?              @db.Uuid
+  channel           NotificationChannel
+  category          NotificationCategory
+  recipient         String?
+  subject           String
+  body              String
+  /// Re-checked just before sending (e.g. an invoice that must still be unpaid).
+  invoiceId         String?              @db.Uuid
+  status            DeliveryStatus       @default(QUEUED)
+  attempts          Int                  @default(0)
+  lastError         String?
+  providerMessageId String?
+  nextAttemptAt     DateTime             @default(now()) @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  sentAt            DateTime?            @db.Timestamptz(3)
+  reportRunId       String?              @db.Uuid
+  reportRun         ReportRun?           @relation(fields: [reportRunId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([invoiceId])
+  @@map("notification_deliveries")
+}
+
+/// When fee reminders go out, relative to the due date.
+model ReminderRule {
+  key        String                @id
+  label      String
+  offsetDays Int                   @db.SmallInt
+  enabled    Boolean               @default(true)
+  channels   NotificationChannel[]
+  position   Int                   @db.SmallInt
+  updatedAt  DateTime              @updatedAt @db.Timestamptz(3)
+
+  @@map("reminder_rules")
+}
+
+model MessageTemplate {
+  key       String   @id
+  subject   String
+  body      String
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("message_templates")
+}
+
+enum ReportFrequency {
+  WEEKLY
+  MONTHLY
+}
+
+/// Parent progress report schedule (single row, id = 1).
+model ScheduledReportConfig {
+  id         Int                   @id @default(1)
+  enabled    Boolean               @default(true)
+  frequency  ReportFrequency       @default(MONTHLY)
+  /// 0 = Sunday … 6 = Saturday (weekly reports)
+  dayOfWeek  Int                   @default(6) @db.SmallInt
+  /// 1–28 (monthly reports)
+  dayOfMonth Int                   @default(1) @db.SmallInt
+  /// HH:MM in the institution's timezone
+  sendAt     String                @default("09:00")
+  channels   NotificationChannel[] @default([EMAIL, IN_APP])
+  sections   String[]              @default(["attendance", "learning", "assessments", "feedback"])
+  updatedAt  DateTime              @updatedAt @db.Timestamptz(3)
+
+  @@map("scheduled_report_config")
+}
+
+enum RunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// One execution of the parent report for one period; the unique key makes reruns no-ops.
+model ReportRun {
+  id          String                 @id @default(uuid()) @db.Uuid
+  periodKey   String                 @unique
+  periodStart DateTime               @db.Date
+  periodEnd   DateTime               @db.Date
+  status      RunStatus              @default(RUNNING)
+  startedAt   DateTime               @default(now()) @db.Timestamptz(3)
+  finishedAt  DateTime?              @db.Timestamptz(3)
+  stats       Json?
+  error       String?
+  deliveries  NotificationDelivery[]
+
+  @@map("report_runs")
+}
+
+/// Last run of each background job, for monitoring.
+model JobStatus {
+  name            String    @id
+  lastStartedAt   DateTime? @db.Timestamptz(3)
+  lastSucceededAt DateTime? @db.Timestamptz(3)
+  lastFailedAt    DateTime? @db.Timestamptz(3)
+  lastError       String?
+  lastResult      Json?
+
+  @@map("job_status")
 }
 
 // ---------------------------------------------------------------------------

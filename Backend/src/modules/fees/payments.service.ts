@@ -8,6 +8,7 @@ import { devGateway, paymentProvider } from '../../integrations/payments/index.j
 import type { ProviderEvent } from '../../integrations/payments/provider.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { invoiceView, receive } from './fees.service.js'
+import { notifyStudentFamily } from '../notifications/notify.service.js'
 
 const ATTEMPT_TTL_MS = 30 * 60 * 1000
 const SYSTEM = { userId: null, name: 'Payment gateway', role: 'system' }
@@ -115,6 +116,7 @@ async function processEvent(event: ProviderEvent): Promise<string> {
     // Money was taken: record it even if the balance changed meanwhile (excess is left for review).
     const payment = await receive(tx, { studentId: attempt.studentId, amountMinor: attempt.amountMinor, method: 'ONLINE', source: 'ONLINE', receivedOn: today, invoiceIds: attempt.invoiceIds, paymentAttemptId: attempt.id, allowUnallocated: true, recordedById: null }, today)
     await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { status: 'SUCCEEDED', providerPaymentId: event.providerPaymentId ?? null } })
+    await notifyStudentFamily(tx, attempt.studentId, { category: 'FEES', title: 'Online payment confirmed', body: `Receipt ${payment.receipt.number} · ${(payment.amountMinor / 100).toFixed(2)} ${payment.currency}`, link: '/fees' }, { fees: true })
     await audit({ action: 'fees.online_payment_confirmed', summary: `Receipt ${payment.receipt.number} · ${(payment.amountMinor / 100).toFixed(2)} ${payment.currency} confirmed by the gateway${payment.unallocatedMinor ? ` (${(payment.unallocatedMinor / 100).toFixed(2)} unallocated — review)` : ''}`, entityType: 'student', entityId: attempt.studentId, actor: SYSTEM, metadata: { attemptId: attempt.id, paymentId: payment.id } }, undefined, tx)
     return payment.unallocatedMinor ? 'succeeded_with_unallocated' : 'succeeded'
   })

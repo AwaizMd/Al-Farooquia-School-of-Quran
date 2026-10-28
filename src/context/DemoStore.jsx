@@ -13,7 +13,7 @@ function loadInitial() {
     if (raw) {
       const parsed = JSON.parse(raw)
       // People are not persisted; start from the seed's until the API replaces them.
-      if (parsed?.version === 2) { const seed = generateSeed(todayISO()); return { ...parsed, students: seed.students, parents: seed.parents, groups: seed.groups, mentors: seed.mentors, attendance: seed.attendance, sabaq: seed.sabaq, exams: seed.exams, results: seed.results, invoices: seed.invoices, payments: seed.payments } }
+      if (parsed?.version === 2) { const seed = generateSeed(todayISO()); return { ...parsed, students: seed.students, parents: seed.parents, groups: seed.groups, mentors: seed.mentors, attendance: seed.attendance, sabaq: seed.sabaq, exams: seed.exams, results: seed.results, invoices: seed.invoices, payments: seed.payments, notifications: [] } }
     }
   } catch {
     /* corrupted or blocked storage — fall back to a fresh seed */
@@ -55,6 +55,9 @@ function reducer(state, a) {
     // People come from the API, already limited to what this account may see.
     case 'HYDRATE_PEOPLE':
       return { ...state, students: a.students, parents: a.parents, groups: a.groups, mentors: a.mentors, feePlans: a.feePlans }
+    // Server notifications belong to the signed-in account; address them to its view.
+    case 'HYDRATE_INBOX':
+      return { ...state, settings: { ...state.settings, ...a.settings }, notifications: a.notifications.map((n) => ({ ...n, audience: [{ role: state.session?.role, id: state.session?.userId }] })) }
     case 'HYDRATE_FEES':
       return { ...state, invoices: a.invoices, payments: a.payments }
     case 'HYDRATE_EXAMS':
@@ -204,7 +207,7 @@ export function DemoStoreProvider({ children }) {
     saveTimer.current = setTimeout(() => {
       try {
         // People records are never written to browser storage; they are reloaded from the API.
-        const { students, parents, groups, mentors, attendance, sabaq, exams, results, invoices, payments, ...rest } = state // eslint-disable-line no-unused-vars
+        const { students, parents, groups, mentors, attendance, sabaq, exams, results, invoices, payments, notifications, ...rest } = state // eslint-disable-line no-unused-vars
         localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
       } catch {
         /* storage full or blocked; the demo keeps working in memory */

@@ -17,6 +17,7 @@ import { peopleRouter } from './modules/students/students.routes.js'
 import { learningRouter } from './modules/learning/learning.routes.js'
 import { assessmentsRouter } from './modules/assessments/assessments.routes.js'
 import { feesRouter, webhookRouter } from './modules/fees/fees.routes.js'
+import { notificationsRouter } from './modules/notifications/notifications.routes.js'
 
 export function createApp() {
   const app = express()
@@ -65,6 +66,7 @@ export function createApp() {
   api.use(learningRouter)
   api.use(assessmentsRouter)
   api.use(feesRouter)
+  api.use(notificationsRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

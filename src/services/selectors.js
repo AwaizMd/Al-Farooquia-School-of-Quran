@@ -272,7 +272,8 @@ export function notificationsFor(state) {
   const s = state.session
   if (!s) return []
   return state.notifications
-    .filter((n) => n.audience.some((a) => a.role === s.role && (!a.id || a.id === s.userId)))
+    // Server notifications (with a category) already belong to the signed-in account.
+    .filter((n) => n.category || n.audience.some((a) => a.role === s.role && (!a.id || a.id === s.userId)))
     .sort((a, b) => b.date.localeCompare(a.date))
 }
 

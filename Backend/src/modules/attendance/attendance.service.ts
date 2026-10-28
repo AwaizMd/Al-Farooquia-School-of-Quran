@@ -5,6 +5,7 @@ import { addDaysIso, daysBetween, institutionToday } from '../../common/clock.js
 import { prisma } from '../../database/prisma.js'
 import { studentScope, taughtGroupsWhere } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
+import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 
 export interface MarkInput {
@@ -75,6 +76,11 @@ export async function markAttendance(req: Request, input: MarkInput) {
         corrections.push({ from: prev.status, to: r.status })
       }
       await tx.attendanceRecord.update({ where: { id: prev.id }, data: { status: r.status, note: r.note ?? null, markedById: auth.user.id } })
+    }
+    // Families hear about an absence the same day (once per newly recorded absence).
+    for (const r of input.records) {
+      const prev = byStudent.get(r.studentId)
+      if (r.status === 'ABSENT' && prev?.status !== 'ABSENT') await notifyStudentFamily(tx, r.studentId, { category: 'ATTENDANCE', title: 'Marked absent', body: `${group.name} · ${input.date}. Please let the mentor know if this is not correct.`, link: '/journey' })
     }
     if (created || corrections.length) {
       await audit({

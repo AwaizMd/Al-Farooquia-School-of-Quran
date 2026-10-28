@@ -6,6 +6,7 @@ import { addDaysIso, daysBetween, institutionToday } from '../../common/clock.js
 import { prisma } from '../../database/prisma.js'
 import { academicScope } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
+import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 import { QAIDA_LESSON_COUNT, ayahRangeError, juzOf } from './quran.js'
 
@@ -98,6 +99,7 @@ export async function createRecord(req: Request, input: LearningInput) {
       },
       include: INCLUDE,
     })
+    await notifyStudentFamily(tx, student.id, { category: 'PROGRESS', title: `New lesson record for ${student.name.split(' ')[0]}`, body: `${input.category.charAt(0)}${input.category.slice(1).toLowerCase()} on ${input.date}. Next target: ${input.nextTarget.trim()}`, link: '/sabaq' })
     await audit({ action: 'learning.recorded', summary: `${input.category} on ${input.date} · performance ${input.performance}/5`, entityType: 'student', entityId: student.id, metadata: { recordId: r.id } }, req, tx)
     return r
   })

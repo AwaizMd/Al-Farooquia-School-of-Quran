@@ -136,3 +136,12 @@ export async function loadFees() {
       .filter((x) => x.amount > 0)),
   }
 }
+
+/** The signed-in account's notifications and the institution settings. */
+export async function loadInbox() {
+  const [n, settings] = await Promise.all([get('/notifications'), get('/settings')])
+  return {
+    notifications: n.items.map((x) => ({ id: x.id, title: x.title, body: x.body, link: x.link, date: x.createdAt.slice(0, 10), read: !!x.readAt, category: x.category })),
+    settings: { brandName: settings.brandName, shortName: settings.shortName, brandArabic: settings.brandArabic, tagline: settings.tagline, address: settings.address, phone: settings.phone, email: settings.email, currency: settings.currency, weeklyOff: settings.weeklyOff, feeDueDay: settings.feeDueDay },
+  }
+}

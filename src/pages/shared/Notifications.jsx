@@ -1,8 +1,9 @@
 import { t } from "../../i18n/I18nProvider"
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck, Info } from 'lucide-react'
+import { Bell, CheckCheck } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
-import { PageHeader, Card, Button, EmptyState, Notice, cx } from '../../components/ui'
+import { post } from '../../api/client'
+import { PageHeader, Card, Button, EmptyState, cx } from '../../components/ui'
 import { notificationsFor } from '../../services/selectors'
 import { relativeDay } from '../../utils/date'
 
@@ -11,11 +12,12 @@ export default function Notifications() {
   const navigate = useNavigate()
   const list = notificationsFor(state)
   const unread = list.filter((n) => !n.read)
-  const open = (n) => { dispatch({ type: 'MARK_NOTIFICATIONS_READ', ids: [n.id] }); if (n.link) navigate(n.link) }
+  // Update the screen at once, and the server in the background.
+  const markRead = (ids) => { dispatch({ type: 'MARK_NOTIFICATIONS_READ', ids }); post('/notifications/read', { ids }).catch(() => {}) }
+  const open = (n) => { if (!n.read) markRead([n.id]); if (n.link) navigate(n.link) }
   return (
     <div>
-      <PageHeader title={t("Notifications")} subtitle={t("{n} unread", { n: unread.length })} actions={unread.length > 0 && <Button variant="secondary" icon={CheckCheck} onClick={() => dispatch({ type: 'MARK_NOTIFICATIONS_READ', ids: unread.map((n) => n.id) })}>{t("Mark all read")}</Button>} />
-      <Notice tone="gold" icon={Info} className="mb-4">{t("In-app demo notifications only. No push notifications, SMS or emails are sent.")}</Notice>
+      <PageHeader title={t("Notifications")} subtitle={t("{n} unread", { n: unread.length })} actions={unread.length > 0 && <Button variant="secondary" icon={CheckCheck} onClick={() => markRead(unread.map((n) => n.id))}>{t("Mark all read")}</Button>} />
       <Card>
         {list.length ? (
           <ul className="divide-y divide-line">

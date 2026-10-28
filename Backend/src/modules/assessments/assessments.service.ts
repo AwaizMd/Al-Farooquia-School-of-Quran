@@ -6,6 +6,7 @@ import { institutionToday } from '../../common/clock.js'
 import { prisma } from '../../database/prisma.js'
 import { academicScope, accessLevel, ACCESS_INCLUDE, taughtGroupsWhere } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
+import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 
 /** Default subjects per track (same as the web app's exam templates). */
@@ -209,6 +210,9 @@ export async function publishExam(req: Request, examRef: string) {
     const scale = await activeScale(tx)
     const r = await tx.exam.updateMany({ where: { id: exam.id, status: 'SCHEDULED' }, data: { status: 'PUBLISHED', publishedAt: new Date(), publishedById: req.auth!.user.id, gradingScaleId: scale.id } })
     if (r.count !== 1) throw conflict('NOT_PUBLISHABLE', 'This exam was already published.')
+    for (const r of await tx.examResult.findMany({ where: { examId: exam.id }, select: { studentId: true } })) {
+      await notifyStudentFamily(tx, r.studentId, { category: 'RESULTS', title: `Results published: ${exam.title}`, body: 'The report card has been updated.', link: '/exams' })
+    }
     await audit({ action: 'exam.published', summary: `${exam.title} published (${entered} results, grading v${scale.version})`, entityType: 'exam', entityId: exam.id }, req, tx)
     return tx.exam.findUniqueOrThrow({ where: { id: exam.id }, include: EXAM_INCLUDE })
   })

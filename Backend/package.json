@@ -21,7 +21,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "mfa:break-glass": "tsx scripts/mfa-break-glass.ts"
+    "mfa:break-glass": "tsx scripts/mfa-break-glass.ts",
+    "worker": "node dist/worker.js",
+    "dev:worker": "tsx watch src/worker.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -34,6 +36,7 @@
     "helmet": "^8.3.0",
     "nodemailer": "^10.2.1",
     "otpauth": "^9.5.2",
+    "pg-boss": "^12.38.0",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
     "qrcode": "^1.5.4",
