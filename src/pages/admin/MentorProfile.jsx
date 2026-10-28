@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Phone, Mail, GraduationCap, CalendarDays, ArrowRightLeft, Power, BookOpenCheck } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { post } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { PageHeader, Card, CardHeader, Avatar, Badge, Button, ConfirmDialog, Stat } from '../../components/ui'
 import StudentCard from '../../features/students/StudentCard'
@@ -15,7 +17,8 @@ import { pct } from '../../utils/format'
 
 export default function MentorProfile() {
   const { id } = useParams()
-  const { state, idx, today, dispatch } = useStore()
+  const { state, idx, today } = useStore()
+  const { refreshPeople } = useAuth()
   const toast = useToast()
   const [assign, setAssign] = useState(null)
   const [confirm, setConfirm] = useState(false)
@@ -35,7 +38,7 @@ export default function MentorProfile() {
     <div>
       <PageHeader crumbs={[{ label: 'Mentors', to: '/mentors' }, { label: m.name }]} title={m.name} subtitle={t(m.role)}
         actions={<>
-          <Button variant="secondary" icon={Power} onClick={() => setConfirm(true)}>{m.status === 'active' ? 'Mark inactive' : 'Mark active'}</Button>
+          {state.session.persona === 'admin' && <Button variant="secondary" icon={Power} onClick={() => setConfirm(true)}>{m.status === 'active' ? 'Mark inactive' : 'Mark active'}</Button>}
           <Button icon={ArrowRightLeft} onClick={() => setAssign(groups[0]?.id || state.groups[0].id)}>{t("Assign halqa")}</Button>
         </>} />
       <div className="grid gap-4 lg:grid-cols-3">
@@ -66,7 +69,7 @@ export default function MentorProfile() {
       </Card>
       <AssignMentor open={!!assign} groupId={assign} onClose={() => setAssign(null)} />
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={m.status === 'active' ? 'Mark mentor inactive?' : 'Reactivate mentor?'} confirmLabel={t("Confirm")} tone={m.status === 'active' ? 'danger' : 'primary'}
-        onConfirm={() => { dispatch({ type: 'SET_MENTOR_STATUS', id, status: m.status === 'active' ? 'inactive' : 'active' }); toast('Mentor status updated') }}>
+        onConfirm={() => post(`/staff/${m.uuid}/status`, { status: m.status === 'active' ? 'INACTIVE' : 'ACTIVE' }).then(refreshPeople).then(() => toast('Mentor status updated'), (err) => toast(err.message, { type: 'error' }))}>
         {m.status === 'active' && groups.length ? `${m.name} still leads ${groups.map((g) => g.name).join(', ')}. Reassign the halqa so its students keep a mentor.` : 'The mentor status will be updated.'}
       </ConfirmDialog>
     </div>

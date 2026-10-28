@@ -32,7 +32,7 @@ export function client() {
     if (typeof token === 'string') csrf = token
     return res
   }
-  const send = (method: 'post' | 'put' | 'delete', url: string, body?: object) => {
+  const send = (method: 'post' | 'put' | 'patch' | 'delete', url: string, body?: object) => {
     const r = agent[method](url).set('X-CSRF-Token', csrf)
     return (body ? r.send(body) : r).then(remember)
   }
@@ -47,6 +47,7 @@ export function client() {
     get: (url: string) => agent.get(url).then(remember),
     post: (url: string, body?: object) => send('post', url, body),
     put: (url: string, body?: object) => send('put', url, body),
+    patch: (url: string, body?: object) => send('patch', url, body),
     del: (url: string) => send('delete', url),
   }
 }

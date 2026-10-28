@@ -1,5 +1,7 @@
 export const ROLE_LABELS = {
   admin: 'Admin',
+  principal: 'Principal',
+  warden: 'Warden',
   mentor: 'Mentor',
   student: 'Student',
   parent: 'Parent',

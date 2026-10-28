@@ -27,13 +27,18 @@ export async function sessionView(userId: string, stage: SessionStage, csrfToken
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { displayName: true } })
     return { stage: STAGE_NAME[stage], csrfToken, user: { displayName: u.displayName } }
   }
-  const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { roles: true } })
+  const u = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: { roles: true, staffProfile: { select: { id: true, code: true } }, guardianProfile: { select: { id: true, code: true } }, studentProfile: { select: { id: true, admissionNo: true } } },
+  })
   const roles = u.roles.map((r) => r.role)
+  // Which people records this account represents (for the web app's role views).
+  const links = { staff: u.staffProfile, guardian: u.guardianProfile, student: u.studentProfile }
   const [enabled, required, codesLeft] = await Promise.all([mfa.activeCredential(u.id), mfa.isMfaRequired(roles), mfa.remainingRecoveryCodes(u.id)])
   return {
     stage: STAGE_NAME[stage],
     csrfToken,
-    user: { id: u.id, displayName: u.displayName, email: u.email, username: u.username, locale: u.locale, roles, mfa: { enabled: !!enabled, required, recoveryCodesRemaining: codesLeft } },
+    user: { id: u.id, displayName: u.displayName, email: u.email, username: u.username, locale: u.locale, roles, links, mfa: { enabled: !!enabled, required, recoveryCodesRemaining: codesLeft } },
   }
 }
 

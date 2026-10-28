@@ -50,17 +50,34 @@ async function deliverInvite(user: { id: string; email: string | null; displayNa
   return { delivery: sent.ok ? ('email' as const) : ('email_failed' as const) }
 }
 
-export async function createUser(req: Request, input: { displayName: string; email?: string | undefined; username?: string | undefined; phone?: string | undefined; roles: Role[] }) {
+export type AccountLink = { kind: 'staff' | 'guardian' | 'student'; id: string }
+const LINK_ROLES: Record<AccountLink['kind'], Role[]> = { staff: ['ADMIN', 'PRINCIPAL', 'MENTOR', 'WARDEN'], guardian: ['PARENT'], student: ['STUDENT'] }
+
+export async function createUser(req: Request, input: { displayName: string; email?: string | undefined; username?: string | undefined; phone?: string | undefined; roles: Role[]; link?: AccountLink | undefined }) {
   const email = input.email ? normaliseIdentifier(input.email) : null
   const username = input.username ? normaliseIdentifier(input.username) : null
   if (!email && !username) throw new AppError(422, 'VALIDATION_FAILED', 'Give an email or a username.')
+  if (input.link && !input.roles.some((r) => LINK_ROLES[input.link!.kind].includes(r))) {
+    throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'link', message: `A ${input.link.kind} record needs a matching role.` }])
+  }
   const clash = await prisma.user.findFirst({ where: { OR: [...(email ? [{ email }, { username: email }] : []), ...(username ? [{ username }, { email: username }] : [])] } })
   if (clash) throw conflict('USER_EXISTS', 'An account with this email or username already exists.')
-  const user = await prisma.user.create({
-    data: { displayName: input.displayName, email, username, phone: input.phone ?? null, status: 'INVITED', roles: { create: input.roles.map((role) => ({ role })) } },
-    select: publicUser,
+  const user = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: { displayName: input.displayName, email, username, phone: input.phone ?? null, status: 'INVITED', roles: { create: input.roles.map((role) => ({ role })) } },
+      select: publicUser,
+    })
+    if (input.link) {
+      // Conditional update: a record that already has an account is never re-linked.
+      const where = { id: input.link.id, userId: null }
+      const n = input.link.kind === 'staff' ? await tx.staffProfile.updateMany({ where, data: { userId: u.id } })
+        : input.link.kind === 'guardian' ? await tx.guardian.updateMany({ where, data: { userId: u.id } })
+        : await tx.student.updateMany({ where, data: { userId: u.id } })
+      if (n.count !== 1) throw conflict('LINK_UNAVAILABLE', 'That record does not exist or already has an account.')
+    }
+    await audit({ action: 'user.created', summary: `Account created with roles ${input.roles.join(', ')}${input.link ? ` and linked to a ${input.link.kind} record` : ''}`, entityType: 'user', entityId: u.id, metadata: input.link ? { link: input.link } : undefined }, req, tx)
+    return u
   })
-  await audit({ action: 'user.created', summary: `Account created with roles ${input.roles.join(', ')}`, entityType: 'user', entityId: user.id }, req)
   const invite = await deliverInvite(user)
   return { user: await view(user), invite }
 }

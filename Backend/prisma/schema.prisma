@@ -84,6 +84,9 @@ model User {
   recoveryCodes   RecoveryCode[]
   recoveryRequests MfaRecoveryRequest[] @relation("RecoveryFor")
   recoveryInitiated MfaRecoveryRequest[] @relation("RecoveryInitiatedBy")
+  staffProfile    StaffProfile?
+  guardianProfile Guardian?
+  studentProfile  Student?
 
   @@map("users")
 }
@@ -243,6 +246,217 @@ model RateLimit {
   resetAt DateTime @db.Timestamptz(3)
 
   @@map("rate_limits")
+}
+
+// ---------------------------------------------------------------------------
+// People: groups (halqas), staff, guardians, students
+// ---------------------------------------------------------------------------
+
+enum Track {
+  HIFZ
+  NAZIRA
+  QAIDA
+  ALIM
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum GroupGender {
+  BOYS
+  GIRLS
+  MIXED
+}
+
+/// A halqa / class.
+model Group {
+  id          String      @id @default(uuid()) @db.Uuid
+  /// Stable human-readable reference, e.g. "g-hifz-a".
+  code        String      @unique
+  name        String
+  short       String
+  track       Track
+  room        String?
+  timing      String?
+  gender      GroupGender
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+
+  students    Student[]
+  mentors     GroupMentorAssignment[]
+  enrollments GroupEnrollment[]
+
+  @@map("groups")
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Staff member (mentor, principal, warden). Optionally linked to a sign-in account.
+model StaffProfile {
+  id             String      @id @default(uuid()) @db.Uuid
+  code           String      @unique
+  userId         String?     @unique @db.Uuid
+  displayName    String
+  title          String
+  phone          String?
+  email          String?
+  joinedOn       DateTime?   @db.Date
+  status         StaffStatus @default(ACTIVE)
+  qualification  String?
+  specialisation String?
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @db.Timestamptz(3)
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  assignments    GroupMentorAssignment[]
+
+  @@map("staff_profiles")
+}
+
+/// Who teaches a halqa, with history. One open (endedAt null) row per group,
+/// enforced by a partial unique index in the migration.
+model GroupMentorAssignment {
+  id        String       @id @default(uuid()) @db.Uuid
+  groupId   String       @db.Uuid
+  staffId   String       @db.Uuid
+  startedAt DateTime     @default(now()) @db.Timestamptz(3)
+  endedAt   DateTime?    @db.Timestamptz(3)
+  group     Group        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  staff     StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@index([staffId, endedAt])
+  @@index([groupId, endedAt])
+  @@map("group_mentor_assignments")
+}
+
+model Guardian {
+  id          String            @id @default(uuid()) @db.Uuid
+  code        String            @unique
+  userId      String?           @unique @db.Uuid
+  name        String
+  relation    String
+  phone       String
+  email       String?
+  occupation  String?
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  students    StudentGuardian[]
+
+  @@index([phone])
+  @@map("guardians")
+}
+
+enum StudentStatus {
+  ACTIVE
+  /// Left or on extended leave; history is kept.
+  INACTIVE
+}
+
+model Student {
+  id             String            @id @default(uuid()) @db.Uuid
+  /// Institution-assigned, unique, never reused. Also the student's sign-in name.
+  admissionNo    String            @unique
+  userId         String?           @unique @db.Uuid
+  name           String
+  gender         Gender
+  dob            DateTime          @db.Date
+  admissionDate  DateTime          @db.Date
+  status         StudentStatus     @default(ACTIVE)
+  groupId        String            @db.Uuid
+  phone          String
+  address        String?
+  hostelResident Boolean           @default(false)
+  bloodGroup     String?
+  medicalNotes   String?
+  feePlanId      String?           @db.Uuid
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(3)
+  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  group          Group             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  feePlan        FeePlan?          @relation(fields: [feePlanId], references: [id], onDelete: Restrict)
+  guardians      StudentGuardian[]
+  enrollments    GroupEnrollment[]
+  concessions    Concession[]
+
+  @@index([groupId, status])
+  @@index([name])
+  @@map("students")
+}
+
+model StudentGuardian {
+  studentId              String   @db.Uuid
+  guardianId             String   @db.Uuid
+  isPrimary              Boolean  @default(false)
+  canViewFees            Boolean  @default(true)
+  canPay                 Boolean  @default(true)
+  receivesNotifications  Boolean  @default(true)
+  linkedAt               DateTime @default(now()) @db.Timestamptz(3)
+  student                Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian               Guardian @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+
+  @@id([studentId, guardianId])
+  @@index([guardianId])
+  @@map("student_guardians")
+}
+
+/// Group membership history (current = endedOn null).
+model GroupEnrollment {
+  id        String    @id @default(uuid()) @db.Uuid
+  studentId String    @db.Uuid
+  groupId   String    @db.Uuid
+  startedOn DateTime  @db.Date
+  endedOn   DateTime? @db.Date
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@map("group_enrollments")
+}
+
+// ---------------------------------------------------------------------------
+// Fee plans and concessions (billing itself arrives with the fees module)
+// ---------------------------------------------------------------------------
+
+model FeePlan {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  name        String
+  /// Minor units (paise for INR).
+  amountMinor Int
+  currency    String    @db.Char(3)
+  cycle       String    @default("MONTHLY")
+  covers      String?
+  active      Boolean   @default(true)
+  students    Student[]
+
+  @@map("fee_plans")
+}
+
+enum ConcessionKind {
+  SIBLING
+  NEED_BASED
+  FULL_SPONSORSHIP
+}
+
+/// Approved fee concession. One open row per student (partial unique index).
+model Concession {
+  id           String         @id @default(uuid()) @db.Uuid
+  studentId    String         @db.Uuid
+  kind         ConcessionKind
+  percent      Int            @db.SmallInt
+  approvedById String?        @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  endedAt      DateTime?      @db.Timestamptz(3)
+  student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("concessions")
 }
 
 // ---------------------------------------------------------------------------

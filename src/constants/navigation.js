@@ -40,6 +40,46 @@ export const NAV = {
       { to: '/fees', label: 'Fees', icon: Wallet },
     ],
   },
+  // Institution-wide oversight: read access to people, learning, fees and reports; no settings or security administration.
+  principal: {
+    sections: [
+      { title: 'Overview', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
+      { title: 'People', items: [
+        { to: '/students', label: 'Students', icon: Users },
+        { to: '/mentors', label: 'Mentors', icon: UserRound },
+      ] },
+      { title: 'Learning', items: [
+        { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+        { to: '/sabaq', label: 'Sabaq Records', icon: ScrollText, end: true },
+        { to: '/exams', label: 'Examinations', icon: ClipboardList },
+        { to: '/library', label: 'Digital Library', icon: Library },
+      ] },
+      { title: 'Insights', items: [
+        { to: '/fees', label: 'Fees', icon: Wallet },
+        { to: '/reports', label: 'Reports', icon: BarChart3 },
+        { to: '/progress-report', label: 'Progress Reports', icon: FileText },
+        { to: '/audit', label: 'Activity Log', icon: History },
+      ] },
+    ],
+    bottom: [
+      { to: '/dashboard', label: 'Home', icon: LayoutDashboard },
+      { to: '/students', label: 'Students', icon: Users },
+      { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+      { to: '/reports', label: 'Reports', icon: BarChart3 },
+    ],
+  },
+  warden: {
+    sections: [
+      { title: 'Hostel', items: [
+        { to: '/dashboard', label: 'Hostel', icon: BedDouble },
+        { to: '/notifications', label: 'Notifications', icon: BellRing },
+      ] },
+    ],
+    bottom: [
+      { to: '/dashboard', label: 'Hostel', icon: BedDouble },
+      { to: '/notifications', label: 'Alerts', icon: BellRing },
+    ],
+  },
   mentor: {
     sections: [
       { title: 'My Halqa', items: [
@@ -102,20 +142,23 @@ export const NAV = {
 }
 
 export const ROUTE_ROLES = {
-  '/students': ['admin', 'mentor'],
+  '/students': ['admin', 'principal', 'mentor'],
   '/students/new': ['admin'],
-  '/mentors': ['admin'],
-  '/attendance': ['admin', 'mentor'],
+  '/mentors': ['admin', 'principal'],
+  '/attendance': ['admin', 'principal', 'mentor'],
   '/sabaq/new': ['admin', 'mentor'],
-  '/fees': ['admin', 'student', 'parent'],
+  '/fees': ['admin', 'principal', 'student', 'parent'],
   '/reminders': ['admin'],
-  '/hostel': ['admin'],
-  '/reports': ['admin'],
-  '/audit': ['admin'],
+  '/hostel': ['admin', 'warden'],
+  '/reports': ['admin', 'principal'],
+  '/audit': ['admin', 'principal'],
   '/settings': ['admin'],
   '/admin/users': ['admin'],
   '/journey': ['student', 'parent'],
-  '/progress-report': ['admin', 'mentor', 'parent'],
+  '/progress-report': ['admin', 'principal', 'mentor', 'parent'],
+  '/exams': ['admin', 'principal', 'mentor', 'student', 'parent'],
+  '/sabaq': ['admin', 'principal', 'mentor', 'student', 'parent'],
+  '/library': ['admin', 'principal', 'mentor', 'student', 'parent'],
 }
 
 export const PAGE_TITLES = [

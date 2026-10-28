@@ -61,9 +61,11 @@ function NavList({ role, onNavigate }) {
 export default function AppShell() {
   const { state, idx } = useStore()
   const auth = useAuth()
-  const role = state.session.role
+  // Navigation follows the account's persona (Principal and Warden reuse admin screens).
+  const role = state.session.persona || state.session.role
   // Name comes from the signed-in account; the subtitle still comes from the demo record.
-  const user = { ...sessionUser(state, idx), name: auth.user.displayName }
+  const demoUser = sessionUser(state, idx)
+  const user = { ...demoUser, name: auth.user.displayName, subtitle: role !== state.session.role ? ROLE_LABELS[role] : demoUser?.subtitle }
   const location = useLocation()
   const navigate = useNavigate()
   const reduce = useReducedMotion()

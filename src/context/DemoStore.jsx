@@ -12,7 +12,8 @@ function loadInitial() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (parsed?.version === 2) return parsed
+      // People are not persisted; start from the seed's until the API replaces them.
+      if (parsed?.version === 2) { const seed = generateSeed(todayISO()); return { ...parsed, students: seed.students, parents: seed.parents, groups: seed.groups, mentors: seed.mentors } }
     }
   } catch {
     /* corrupted or blocked storage — fall back to a fresh seed */
@@ -42,7 +43,7 @@ const notify = (state, n) => ({
 function reducer(state, a) {
   switch (a.type) {
     case 'LOGIN':
-      return { ...state, session: { role: a.role, userId: a.userId, at: Date.now() } }
+      return { ...state, session: { role: a.role, persona: a.persona || a.role, userId: a.userId, at: Date.now() } }
     case 'SELECT_CHILD':
       return { ...state, session: { ...state.session, childId: a.childId } }
     case 'LOGOUT':
@@ -51,6 +52,9 @@ function reducer(state, a) {
       const fresh = generateSeed(todayISO())
       return { ...fresh, session: state.session }
     }
+    // People come from the API, already limited to what this account may see.
+    case 'HYDRATE_PEOPLE':
+      return { ...state, students: a.students, parents: a.parents, groups: a.groups, mentors: a.mentors, feePlans: a.feePlans }
     case 'UPDATE_SETTINGS':
       return withAudit({ ...state, settings: { ...state.settings, ...a.patch } }, { action: 'Settings updated', entity: 'Madarsa settings', description: Object.keys(a.patch).join(', ') })
 
@@ -192,7 +196,9 @@ export function DemoStoreProvider({ children }) {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+        // People records are never written to browser storage; they are reloaded from the API.
+        const { students, parents, groups, mentors, ...rest } = state // eslint-disable-line no-unused-vars
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
       } catch {
         /* storage full or blocked; the demo keeps working in memory */
       }

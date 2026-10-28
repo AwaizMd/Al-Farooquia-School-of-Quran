@@ -57,7 +57,7 @@ export default function StudentProfile() {
       <PageHeader crumbs={[{ label: role === 'mentor' ? 'My Students' : 'Students', to: '/students' }, { label: st.name }]} title={st.name}
         subtitle={`${st.id} · ${t(group?.name)} · ${t(TRACKS[st.track].long)}`}
         actions={<>
-          {role === 'admin' && <Button variant="secondary" icon={Pencil} to={`/students/${id}/edit`}>{t("Edit")}</Button>}
+          {state.session.persona === 'admin' && <Button variant="secondary" icon={Pencil} to={`/students/${id}/edit`}>{t("Edit")}</Button>}
           <Button icon={BookOpenCheck} to={`/sabaq/new?student=${id}`}>{t("Record Sabaq")}</Button>
         </>} />
 
@@ -221,7 +221,7 @@ export default function StudentProfile() {
                   <p className="mt-0.5 text-[18px] font-extrabold text-forest">{bed.roomId} · {bed.label}</p>
                   <p className="text-[12.5px] text-ink-muted">{state.rooms.find((r) => r.id === bed.roomId)?.block}</p>
                 </div>
-              ) : <p className="rounded-xl bg-gold-50 px-3 py-2 text-[13px] text-gold-700">{t("Hostel resident without a bed.")} {role === 'admin' && <Link to="/hostel?tab=rooms" className="font-bold underline">{t("Assign a bed")}</Link>}</p>}
+              ) : <p className="rounded-xl bg-gold-50 px-3 py-2 text-[13px] text-gold-700">{t("Hostel resident without a bed.")} {state.session.persona === 'admin' && <Link to="/hostel?tab=rooms" className="font-bold underline">{t("Assign a bed")}</Link>}</p>}
               <div>
                 <p className="mb-1.5 text-[12px] font-bold uppercase tracking-wider text-ink-muted">{t("Recent night roll call")}</p>
                 <ul className="divide-y divide-line rounded-xl border border-line">

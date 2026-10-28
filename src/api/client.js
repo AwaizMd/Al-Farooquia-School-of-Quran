@@ -50,6 +50,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 export const get = (path, opts) => api(path, { ...opts, method: 'GET' })
 export const post = (path, body) => api(path, { method: 'POST', body })
 export const put = (path, body) => api(path, { method: 'PUT', body })
+export const patch = (path, body) => api(path, { method: 'PATCH', body })
 export const del = (path) => api(path, { method: 'DELETE' })
 
 /** Read a one-time token from the URL and remove it so it is not kept in history or shared by accident. */

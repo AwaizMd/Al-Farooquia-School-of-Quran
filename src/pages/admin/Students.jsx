@@ -62,7 +62,7 @@ export default function Students() {
         subtitle={t(role === 'mentor' ? '{n} of {total} students in your halqas' : '{n} of {total} students', { n: list.length, total: all.length })}
         actions={<>
           <Button variant="secondary" icon={Download} onClick={exportCsv} disabled={!list.length}>{t("Export CSV")}</Button>
-          {role === 'admin' && <Button icon={UserPlus} to="/students/new">{t("Add student")}</Button>}
+          {state.session.persona === 'admin' && <Button icon={UserPlus} to="/students/new">{t("Add student")}</Button>}
         </>}
       />
 

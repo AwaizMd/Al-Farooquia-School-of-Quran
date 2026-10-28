@@ -13,6 +13,7 @@ import { csrfProtection, loadSession } from './middleware/auth.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { healthRouter } from './modules/health/health.routes.js'
 import { adminRouter } from './modules/users/users.routes.js'
+import { peopleRouter } from './modules/students/students.routes.js'
 
 export function createApp() {
   const app = express()
@@ -55,6 +56,7 @@ export function createApp() {
   api.use(loadSession, csrfProtection)
   api.use('/auth', authRouter)
   api.use('/admin', adminRouter)
+  api.use(peopleRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

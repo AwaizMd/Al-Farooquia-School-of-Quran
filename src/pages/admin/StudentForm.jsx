@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Save, UserPlus, Users, BedDouble, Wallet } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
+import { useAuth } from '../../context/AuthContext'
+import { patch as apiPatch, post } from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { PageHeader, Card, CardHeader, Input, Select, Textarea, Button, Segmented, Notice, ConfirmDialog } from '../../components/ui'
 import { NotFound } from '../shared/Fallbacks'
@@ -16,10 +18,16 @@ const CONCESSIONS = {
   full: { type: 'Full sponsorship (Yateem fund)', percent: 100 },
 }
 const concessionKey = (c) => (!c ? 'none' : c.percent >= 100 ? 'full' : c.percent >= 50 ? 'need' : 'sibling')
+const CONCESSION_KIND = { none: null, sibling: 'SIBLING', need: 'NEED_BASED', full: 'FULL_SPONSORSHIP' }
+// Server field paths -> form fields, so API validation messages land on the right input.
+const FIELD = { name: 'name', dob: 'dob', admissionDate: 'admissionDate', groupId: 'groupId', phone: 'phone', feePlanId: 'feePlanId', 'guardian.name': 'gName', 'guardian.phone': 'gPhone', 'guardian.email': 'gEmail', 'guardian.existingId': 'guardianId', 'primaryGuardian.name': 'gName', 'primaryGuardian.phone': 'gPhone', 'primaryGuardian.email': 'gEmail' }
 
 export default function StudentForm() {
   const { id } = useParams()
-  const { state, idx, dispatch } = useStore()
+  const { state, idx } = useStore()
+  const { refreshPeople } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [duplicates, setDuplicates] = useState(null)
   const toast = useToast()
   const navigate = useNavigate()
   const existing = id ? idx.students[id] : null
@@ -60,26 +68,31 @@ export default function StudentForm() {
     return Object.keys(e).length === 0
   }
 
-  const submit = (ev) => {
-    ev.preventDefault()
+  const submit = async (ev, confirmDuplicate = false) => {
+    ev?.preventDefault()
     if (!validate()) { toast('Please check the highlighted fields', { type: 'error' }); return }
     const base = {
-      name: f.name.trim(), gender: f.gender, dob: f.dob, groupId: f.groupId, admissionDate: f.admissionDate, phone: f.phone.trim(),
-      address: f.address.trim(), hostel: f.hostel, feePlanId: f.feePlanId, concession: CONCESSIONS[f.concession], medical: f.medical.trim(),
+      name: f.name.trim(), gender: f.gender === 'F' ? 'FEMALE' : 'MALE', dob: f.dob, admissionDate: f.admissionDate, groupId: idx.groups[f.groupId]?.uuid,
+      phone: f.phone.trim(), address: f.address.trim(), hostelResident: f.hostel, feePlanId: state.feePlans.find((p) => p.id === f.feePlanId)?.uuid,
+      concession: CONCESSION_KIND[f.concession], medicalNotes: f.medical.trim(),
     }
-    if (existing) {
-      const changed = Object.keys(base).filter((k) => JSON.stringify(base[k]) !== JSON.stringify(existing[k]))
-      dispatch({ type: 'UPDATE_STUDENT', id: existing.id, patch: { ...base, status: f.status }, guardianPatch: { name: f.gName, relation: f.gRelation, phone: f.gPhone, email: f.gEmail, occupation: f.gOccupation },
-        summary: changed.length ? `Updated: ${changed.join(', ')}` : 'Guardian details reviewed' })
-      toast('Student record updated', { description: base.name })
-      navigate(`/students/${existing.id}`)
-    } else {
-      const max = Math.max(...state.students.map((s) => Number(s.id.split('-')[1])))
-      const newId = `S-${max + 1}`
-      dispatch({ type: 'ADD_STUDENT', student: { id: newId, ...base, bloodGroup: '' }, guardianId: f.guardianMode === 'existing' ? f.guardianId : null,
-        guardian: { name: f.gName.trim(), relation: f.gRelation, phone: f.gPhone.trim(), email: f.gEmail.trim(), occupation: f.gOccupation.trim() } })
-      toast('Student added', { description: `${base.name} · ${newId}` })
-      navigate(`/students/${newId}`)
+    const guardian = { name: f.gName.trim(), relation: f.gRelation, phone: f.gPhone.trim(), email: f.gEmail.trim(), occupation: f.gOccupation.trim() }
+    setSaving(true)
+    try {
+      const saved = existing
+        ? await apiPatch(`/students/${existing.uuid}`, { ...base, status: f.status === 'active' ? 'ACTIVE' : 'INACTIVE', primaryGuardian: guardian })
+        : await post('/students', { ...base, guardian: f.guardianMode === 'existing' ? { existingId: state.parents.find((p) => p.id === f.guardianId)?.uuid } : guardian, ...(confirmDuplicate ? { confirmDuplicate: true } : {}) })
+      await refreshPeople()
+      toast(existing ? 'Student record updated' : 'Student added', { description: `${saved.name} · ${saved.admissionNo}` })
+      setDirty(false)
+      navigate(`/students/${saved.admissionNo}`)
+    } catch (err) {
+      if (err.code === 'POSSIBLE_DUPLICATE') return setDuplicates(err.details || [])
+      const fe = Object.fromEntries(Object.entries(err.fieldErrors || {}).map(([k, v]) => [FIELD[k] || k, v]))
+      if (Object.keys(fe).length) setErrors(fe)
+      toast(err.code === 'VALIDATION_FAILED' ? 'Please check the highlighted fields' : err.message, { type: 'error' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -167,10 +180,13 @@ export default function StudentForm() {
           </Card>
           <div className="sticky bottom-[76px] z-10 flex gap-2 rounded-2xl border border-line bg-white/95 p-2 shadow-lift backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
             <Button variant="secondary" className="flex-1" onClick={cancel}>{t("Cancel")}</Button>
-            <Button type="submit" className="flex-[2]" icon={Save}>{existing ? 'Save changes' : 'Add student'}</Button>
+            <Button type="submit" className="flex-[2]" icon={Save} loading={saving}>{existing ? 'Save changes' : 'Add student'}</Button>
           </div>
         </div>
       </div>
+      <ConfirmDialog open={!!duplicates} onClose={() => setDuplicates(null)} title={t("Possible duplicate admission")} confirmLabel={t("Admit anyway")} onConfirm={() => submit(null, true)}>
+        {t("A student with the same name and date of birth already exists:")} {duplicates?.map((d) => `${d.name} (${d.admissionNo})`).join(', ')}. {t("Admit this student anyway?")}
+      </ConfirmDialog>
       <ConfirmDialog open={confirmLeave} onClose={() => setConfirmLeave(false)} title={t("Discard changes?")} confirmLabel={t("Discard")} tone="danger" onConfirm={() => navigate(-1)}>
         {t("Your unsaved changes to this form will be lost.")}
       </ConfirmDialog>

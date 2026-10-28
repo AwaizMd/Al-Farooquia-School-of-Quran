@@ -9,13 +9,21 @@ export const PERMISSIONS = [
   'security.manage',
   'audit.read',
   'settings.manage',
+  // Institution-wide read of every student (others get row-level scopes, see policies/students.ts).
+  'students.read',
+  'students.write',
+  'guardians.read',
+  'staff.read',
+  'staff.manage',
+  'groups.manage',
+  'concessions.manage',
 ] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
-  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage'],
+  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage'],
   // Approved: the Principal sees institution-wide information but not security administration.
-  PRINCIPAL: ['users.read', 'audit.read'],
+  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read'],
   MENTOR: [],
   STUDENT: [],
   PARENT: [],

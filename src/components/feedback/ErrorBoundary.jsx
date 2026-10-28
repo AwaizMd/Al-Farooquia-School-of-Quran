@@ -11,7 +11,7 @@ export default class ErrorBoundary extends Component {
     return (
       <div className="card mx-auto max-w-md p-6 text-center">
         <p className="font-bold text-forest">{t("Something went wrong on this page")}</p>
-        <p className="mt-1 text-[13.5px] text-ink-muted">{t("Your demo data is safe. Try going back, or reset the demo from Demo Mode if the problem continues.")}</p>
+        <p className="mt-1 text-[13.5px] text-ink-muted">{t("Your data is safe. Go back to the dashboard and try again. If it keeps happening, contact the office.")}</p>
         <button type="button" onClick={() => { this.setState({ error: null }); window.location.assign('/dashboard') }} className="mt-4 min-h-[44px] rounded-xl bg-primary-700 px-4 font-semibold text-white">{t("Back to dashboard")}</button>
       </div>
     )

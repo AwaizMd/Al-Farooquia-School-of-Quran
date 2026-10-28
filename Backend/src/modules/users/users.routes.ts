@@ -20,6 +20,7 @@ const CreateUser = z
     username: z.string().trim().regex(/^[A-Za-z0-9._-]{3,40}$/, 'Use 3–40 letters, numbers, dots, dashes or underscores.').optional(),
     phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/).optional(),
     roles: z.array(RoleEnum).min(1).max(6),
+    link: z.object({ kind: z.enum(['staff', 'guardian', 'student']), id: z.string().uuid() }).optional(),
   })
   .refine((v) => v.email || v.username, { message: 'Give an email or a username.', path: ['email'] })
 const SetRoles = z.object({ roles: z.array(RoleEnum).min(1).max(6) })

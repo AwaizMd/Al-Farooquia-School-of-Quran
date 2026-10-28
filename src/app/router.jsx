@@ -1,3 +1,5 @@
+import { t } from '../i18n/I18nProvider'
+import { Button } from '../components/ui'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useStore } from '../context/DemoStore'
 import { ROUTE_ROLES } from '../constants/navigation'
@@ -36,6 +38,19 @@ import Security from '../pages/account/Security'
 
 const Loading = () => <div className="flex min-h-dvh items-center justify-center bg-ivory" aria-busy="true"><span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-r-transparent" /></div>
 
+function LoadFailed({ error, onRetry, onSignOut }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-ivory px-6 text-center">
+      <p className="font-bold text-forest">{t("Could not load your records")}</p>
+      <p className="max-w-sm text-[13.5px] text-ink-muted">{t(error.message)}</p>
+      <div className="flex gap-2">
+        <Button onClick={onRetry}>{t("Try again")}</Button>
+        <Button variant="secondary" onClick={onSignOut}>{t("Sign out")}</Button>
+      </div>
+    </div>
+  )
+}
+
 // Every page below needs a full server session (password + MFA where required).
 function RequireAuth({ children }) {
   const auth = useAuth()
@@ -43,6 +58,7 @@ function RequireAuth({ children }) {
   if (auth.status === 'loading') return <Loading />
   if (auth.status !== 'full') return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (!auth.hasDemoView) return <InterimHome />
+  if (auth.peopleError) return <LoadFailed error={auth.peopleError} onRetry={auth.refreshPeople} onSignOut={auth.logout} />
   if (!auth.demoReady) return <Loading />
   return children
 }
@@ -58,7 +74,7 @@ function PublicOnly({ children }) {
 function Gate({ path, roles, children }) {
   const { state } = useStore()
   const allowed = roles || ROUTE_ROLES[path]
-  if (allowed && !allowed.includes(state.session.role)) return <Forbidden />
+  if (allowed && !allowed.includes(state.session.persona || state.session.role)) return <Forbidden />
   return children
 }
 
@@ -84,16 +100,16 @@ export default function AppRoutes() {
         <Route path="/mentors/:id" element={<Gate path="/mentors"><MentorProfile /></Gate>} />
         <Route path="/attendance" element={<Gate path="/attendance"><Attendance /></Gate>} />
         <Route path="/sabaq/new" element={<Gate path="/sabaq/new"><RecordSabaq /></Gate>} />
-        <Route path="/sabaq" element={<SabaqRecords />} />
+        <Route path="/sabaq" element={<Gate path="/sabaq"><SabaqRecords /></Gate>} />
         <Route path="/journey" element={<Gate path="/journey"><Journey /></Gate>} />
         <Route path="/progress-report" element={<Gate path="/progress-report"><ProgressReport /></Gate>} />
-        <Route path="/exams" element={<Exams />} />
+        <Route path="/exams" element={<Gate path="/exams"><Exams /></Gate>} />
         <Route path="/exams/:id" element={<Gate roles={['admin', 'mentor']}><ExamDetail /></Gate>} />
-        <Route path="/report-card/:id" element={<ReportCard />} />
+        <Route path="/report-card/:id" element={<Gate path="/exams"><ReportCard /></Gate>} />
         <Route path="/fees" element={<Gate path="/fees"><Fees /></Gate>} />
         <Route path="/reminders" element={<Gate path="/reminders"><Reminders /></Gate>} />
         <Route path="/hostel" element={<Gate path="/hostel"><Hostel /></Gate>} />
-        <Route path="/library" element={<Library />} />
+        <Route path="/library" element={<Gate path="/library"><Library /></Gate>} />
         <Route path="/reports" element={<Gate path="/reports"><Reports /></Gate>} />
         <Route path="/audit" element={<Gate path="/audit"><Audit /></Gate>} />
         <Route path="/notifications" element={<Notifications />} />
