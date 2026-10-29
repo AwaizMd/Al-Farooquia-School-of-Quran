@@ -30,7 +30,8 @@ Create `/etc/madarsa/env` with owner root, group madarsa and mode 640. Never com
 | `TOKEN_HMAC_KEY` | 32 random bytes, base64 |
 | `MFA_ENCRYPTION_KEYS` / `MFA_ACTIVE_KEY_VERSION` | `1:<32 random bytes, base64>` / `1` |
 | `MAIL_TRANSPORT` / `SMTP_URL` / `MAIL_FROM` | `smtp` and your provider's SMTP URL |
-| `PAYMENT_PROVIDER` | `none` until the gateway is live, then `razorpay` plus the three `RAZORPAY_*` values |
+| `PAYMENT_PROVIDER` | `none`: payment methods and Razorpay keys are set by an administrator in Fee Payment Settings (see [PAYMENTS.md](PAYMENTS.md)). Use `razorpay` plus the three `RAZORPAY_*` values only if the keys should live in this file instead |
+| `SETTINGS_ENCRYPTION_KEYS` / `SETTINGS_ACTIVE_KEY_VERSION` | `1:<32 random bytes, base64>` / `1`. Seals the Razorpay secrets entered in the app |
 | `STORAGE_DRIVER` / `STORAGE_DIR` | `local` and `/srv/madarsa/storage`, or `s3` with the `S3_*` values |
 | `API_DOCS_ENABLED` | `false` |
 
@@ -108,7 +109,7 @@ Back up three things, and store them **separately**:
    sudo -u postgres pg_dump -Fc madarsa > /var/backups/madarsa-$(date +%F).dump
    ```
 2. **Uploaded files:** `/srv/madarsa/storage`, or the S3 bucket's versioning and replication.
-3. **Secrets:** `/etc/madarsa/env`. Store it away from the database dumps, because `MFA_ENCRYPTION_KEYS` must never sit next to the data it protects.
+3. **Secrets:** `/etc/madarsa/env`. Store it away from the database dumps, because `MFA_ENCRYPTION_KEYS` and `SETTINGS_ENCRYPTION_KEYS` must never sit next to the data they protect. Uploaded proofs of payment and the UPI QR code are in the storage folder or bucket (item 2).
 
 To restore, create a fresh database and load the latest dump into it:
 
@@ -123,6 +124,7 @@ Test a restore on a separate machine at least once a term.
 | Secret | How | Effect |
 |---|---|---|
 | `TOKEN_HMAC_KEY` | Replace it and restart the API and the worker | Everyone is signed out. Outstanding invitation, reset and recovery links and **recovery codes** stop working; users can generate new codes in Account security |
+| `SETTINGS_ENCRYPTION_KEYS` | Add `2:<new key>`, set `SETTINGS_ACTIVE_KEY_VERSION=2`, restart, then re-enter the Razorpay secrets in Fee Payment Settings | Secrets saved afterwards use key 2. Keep key 1 until they have been re-entered |
 | `MFA_ENCRYPTION_KEYS` | Add `2:<new key>` to the list, set `MFA_ACTIVE_KEY_VERSION=2` and restart | New and re-enrolled authenticators use key 2. Keep key 1 until every user has re-enrolled, then remove it |
 | Database passwords | Run `ALTER ROLE ... PASSWORD`, update `/etc/madarsa/env` and restart | None |
 | `RAZORPAY_*`, `SMTP_URL`, `S3_*` | Rotate in the provider dashboard, update `/etc/madarsa/env` and restart | None |
@@ -130,10 +132,7 @@ Test a restore on a separate machine at least once a term.
 ## 7. External providers
 
 - **Email (required):** use any SMTP provider (Amazon SES, Zoho, Brevo, Postmark…). Set `MAIL_TRANSPORT=smtp`, `SMTP_URL` and `MAIL_FROM`, and configure SPF and DKIM for the sending domain.
-- **Razorpay:**
-  1. Create API keys in the Razorpay dashboard and set the three `RAZORPAY_*` values.
-  2. Add a webhook pointing to `https://<domain>/api/v1/payments/webhooks/razorpay` for the events `payment.captured`, `order.paid`, `payment.failed` and `refund.processed`, using `RAZORPAY_WEBHOOK_SECRET`.
-  3. Test in **test mode** first. The adapter has not yet been run against a live Razorpay account.
+- **Fee payments (Razorpay, bank transfer, UPI QR):** configured in the app, not here. Follow [PAYMENTS.md](PAYMENTS.md#setting-up). Test Razorpay in **test mode** first: the adapter has not yet been run against a live Razorpay account.
 - **WhatsApp / SMS:** not connected yet. Messages for these channels are recorded as skipped.
   - WhatsApp needs a Business account and approved message templates.
   - SMS in India needs DLT registration.

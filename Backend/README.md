@@ -4,6 +4,7 @@ Express 5 + TypeScript API and background worker for the Al Farooquia Madarsa Ma
 
 - Deployment, backups, secret rotation and providers: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Security controls and known limitations: [docs/SECURITY.md](docs/SECURITY.md)
+- Fee payment methods (Razorpay, bank transfer, UPI QR) and verification: [docs/PAYMENTS.md](docs/PAYMENTS.md)
 - QA audit (30 Oct 2026): what was tested, defects found and fixed, what remains: [docs/QA-REPORT.md](docs/QA-REPORT.md)
 - API reference: http://localhost:4000/api/docs when `API_DOCS_ENABLED=true` (OpenAPI 3.1 at `/api/docs/openapi.json`)
 
@@ -53,7 +54,7 @@ It also creates one sign-in per role. The password for all of them is `farooquia
 
 | Script | What it does |
 |---|---|
-| `npm test` | 152 unit, integration and security tests against a throwaway PostgreSQL (never the dev database) |
+| `npm test` | 183 unit, integration and security tests against a throwaway PostgreSQL (never the dev database) |
 | `npm run typecheck` / `npm run lint` | TypeScript and ESLint |
 | `npm run build` | Compile to `dist/` |
 | `npm start` / `npm run worker` | Run the compiled API / worker |
@@ -75,7 +76,8 @@ src/
     students, staff              students, guardians, halqas, mentors, fee plans
     attendance, learning         daily registers, Sabaq/Sabqi/Manzil/Nazira/Qaida records
     assessments                  exams, marks, versioned grading, report cards
-    fees                         invoices, payments, receipts, refunds, online checkout, webhooks
+    fees                         invoices, payments, receipts, refunds, online checkout, webhooks, bank/UPI verification
+    payment-settings             which payment methods are offered, Razorpay keys (sealed), bank details, UPI QR
     notifications                in-app notices, delivery queue, fee reminders, settings
     scheduled-reports            parent progress reports
     hostel, library              rooms/beds/roll call, catalogue and private files
@@ -107,6 +109,7 @@ These are the defaults approved for this build. Each is noted in the code where 
   - Monthly invoices are issued on the 1st and due on the 10th; a new admission is billed for the current month in full.
   - Concessions are 10% (sibling), 50% (need-based) or 100% (sponsorship), rounded to ₹10, and approved by an administrator.
   - Payments go to the oldest invoice first, and overpayment at the office is refused.
+  - Bank transfer / UPI payments are claims until an administrator approves them; claims may not exceed what is owed after other pending claims; one live claim per UTR (details in [docs/PAYMENTS.md](docs/PAYMENTS.md)).
   - Receipt numbers restart each April–March financial year.
   - A change to a fee plan affects future invoices only.
 - **Reminders:** 3 days before, on the due date, and 3 and 7 days after (editable), at 09:00 Asia/Kolkata, at most once per stage. The balance is re-checked before each send.

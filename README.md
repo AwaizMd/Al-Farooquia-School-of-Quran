@@ -30,7 +30,7 @@ The web app needs no secrets. By default it calls the API on the same origin (`/
 
 ```bash
 cd Frontend && npm test      # web app: renders every page for every role against a fake API
-cd Backend && npm test       # API: 152 unit, integration and security tests on a throwaway database
+cd Backend && npm test       # API: 183 unit, integration and security tests on a throwaway database
 ```
 
 ## What each role can do
@@ -38,9 +38,10 @@ cd Backend && npm test       # API: 152 unit, integration and security tests on 
 - **Administrator:**
   - Manages students (admissions, guardians, halqas, concessions), mentors and halqa assignments.
   - Handles attendance corrections, exams and grading, fees (invoices, office payments, adjustments, refunds) and reminders.
+  - Chooses how families pay (Razorpay, bank transfer, UPI QR) in Fee Payment Settings, and approves or rejects reported bank/UPI payments in Payment Verification.
   - Runs the hostel and library, reports, the activity log, institution settings, the parent-report schedule and background jobs.
   - Manages accounts, roles and MFA resets.
-- **Principal:** reads everything academic and operational, including fees, reports and the activity log, and can correct attendance. Has no settings, account or security administration.
+- **Principal:** reads everything academic and operational, including fees, reported payments, reports and the activity log, and can correct attendance. Has no settings, account or security administration.
 - **Mentor:**
   - Sees only the halqas currently assigned to them.
   - Marks today's attendance, records Sabaq/Sabqi/Manzil/Nazira/Qaida, and schedules tests and enters marks.
@@ -48,7 +49,7 @@ cd Backend && npm test       # API: 152 unit, integration and security tests on 
 - **Warden:** manages hostel rooms, beds, transfers and the night roll call, seeing residents' hostel details only.
 - **Parent:**
   - Sees each linked child (and can switch between them): attendance, lessons and targets, mentor feedback, published results and report cards, fees and receipts, and notifications.
-  - Pays fees online, and receives scheduled progress reports.
+  - Pays fees by the methods the Madarsa offers: online, or by bank transfer / UPI QR reported for verification (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Receives scheduled progress reports.
 - **Student:** sees their own learning journey, records, results, fees and library.
 
 Every rule above is enforced by the API: a hidden button is never the only protection. See [Backend/docs/SECURITY.md](Backend/docs/SECURITY.md).
@@ -57,14 +58,14 @@ Every rule above is enforced by the API: a hidden button is never the only prote
 
 `src/api/` is the only code that talks to the server. After sign-in, the records the account is allowed to see are loaded into an in-memory cache (`src/context/DemoStore.jsx`), and the screens compute their figures from it with `src/services/selectors.js`. Every change is sent to the API first, and the affected data is then reloaded. Nothing is stored in the browser apart from the language choice.
 
-`src/data/` keeps the fictional demo dataset. It is used only to seed development databases and by the tests; it is not part of the production bundle.
+`Frontend/src/data/` keeps the fictional demo dataset. It is used only to seed development databases and by the tests; it is not part of the production bundle.
 
 ## Before going live
 
 These still need real accounts or decisions from the Madarsa:
 
 1. **Email:** an SMTP provider for invitations, password resets, reminders and reports. This is required.
-2. **Razorpay:** a merchant account, then testing in test mode. Until then, online payment shows "pay at the office".
+2. **Fee payments:** in Fee Payment Settings, enter the bank details and/or upload the Madarsa's UPI QR code, and, for online payment, a Razorpay account tested in test mode first (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Until a method is set up, families are asked to pay at the office.
 3. **WhatsApp or SMS (optional):** a provider, approved templates, and DLT registration for SMS in India.
 4. **Hosting:** a VPS and domain. The deployment files have not been run yet.
 5. **Real data:** the people records, entered through the app or imported.
