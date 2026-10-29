@@ -31,7 +31,7 @@ This document lists what is implemented and tested, and what is not. Installing 
   - WhatsApp and SMS are not connected.
 - **No malware scanning** of uploads. PDFs and audio are content-checked but not scanned. Add ClamAV or the storage provider's scanning if staff will upload files from outside sources.
 - **Uploads through local storage** are only as safe as the server's disk and backups. Prefer a private S3/R2 bucket in production.
-- **The deployment files have not been run.** The Dockerfile, compose file and Caddyfile are written but untested in this environment.
+- **The deployment files have not been run.** The systemd units and the Caddyfile are written but untested.
 - **No external error reporting or alerting.** Monitoring relies on the health endpoints and the background-job panel.
 - **Students without email** depend on the office for password resets and in-person MFA recovery, by design.
 - **Rate limits** are fixed-window. That's adequate for one institution, but they're not a defence against a large distributed attack; put the site behind Cloudflare or similar if that becomes a concern.

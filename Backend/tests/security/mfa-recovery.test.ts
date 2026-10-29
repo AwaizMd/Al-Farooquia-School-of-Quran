@@ -212,4 +212,14 @@ describe('account administration guards', () => {
     await makeUser({ email: 'w@x.test', roles: ['WARDEN'] })
     expect((await client().post('/api/v1/auth/login', { identifier: 'w@x.test', password: PASSWORD })).body.stage).toBe('mfa_enrollment_required')
   })
+
+  it('never lets the policy make MFA optional for Admin, Principal or Mentor', async () => {
+    const { c, secret } = await adminSession()
+    await reauth(c, secret)
+    for (const role of ['ADMIN', 'PRINCIPAL', 'MENTOR'] as const) {
+      const r = await c.put('/api/v1/admin/security/mfa-policy', { policy: [{ role, required: false }] })
+      expect(r.status).toBe(422)
+    }
+    expect(await prisma.mfaPolicy.count({ where: { role: { in: ['ADMIN', 'PRINCIPAL', 'MENTOR'] }, required: false } })).toBe(0)
+  })
 })

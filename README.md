@@ -6,7 +6,7 @@ A mobile-first web app for running a Madarsa. It serves administrators, the Prin
 |---|---|---|
 | Web app | this folder (`src/`) | React 18, Vite 7, Tailwind CSS 3, React Router 7, Framer Motion, Recharts |
 | API and background worker | [`Backend/`](Backend/README.md) | Node.js 22, Express 5, TypeScript, PostgreSQL 17 (Prisma 7), pg-boss |
-| Deployment | [`deploy/`](deploy) and [`Backend/docs/DEPLOYMENT.md`](Backend/docs/DEPLOYMENT.md) | Docker Compose, Caddy (HTTPS) |
+| Deployment | [`deploy/`](deploy) and [`Backend/docs/DEPLOYMENT.md`](Backend/docs/DEPLOYMENT.md) | systemd services, Caddy (HTTPS), PostgreSQL on the host |
 
 ## Run it locally
 

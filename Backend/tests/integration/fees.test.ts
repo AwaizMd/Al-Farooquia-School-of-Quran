@@ -3,7 +3,7 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../src/database/prisma.js'
 import { institutionToday } from '../../src/common/clock.js'
-import { fiscalYearOf, discountFor } from '../../src/modules/fees/fees.service.js'
+import { fiscalYearOf, discountFor, issueInvoices } from '../../src/modules/fees/fees.service.js'
 import { razorpayProvider } from '../../src/integrations/payments/razorpay.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, app, client, type Client } from '../helpers/auth.js'
@@ -50,6 +50,12 @@ describe('invoicing', () => {
     expect((await admin.get('/api/v1/fees/students/S-2')).body.invoices[0].amountMinor).toBe(150000)
     const inv = await prisma.invoice.findFirstOrThrow()
     await expect(prisma.invoice.update({ where: { id: inv.id }, data: { amountMinor: 1 } })).rejects.toThrow()
+  })
+
+  it('bills students admitted on the last days of a month for that month', async () => {
+    const late = await prisma.student.create({ data: { admissionNo: 'S-31', name: 'Late Admission', gender: 'MALE', dob: new Date('2013-01-01T00:00:00Z'), admissionDate: new Date('2026-01-31T00:00:00Z'), groupId: fx.groups.gA.id, phone: '+91 90000 00009', feePlanId: fx.plan.id } })
+    expect((await issueInvoices(null, '2026-01', late.id)).created).toBe(1)
+    expect((await issueInvoices(null, '2025-12', late.id)).created).toBe(0)
   })
 
   it('uses the April–March financial year for receipt numbers', () => {

@@ -3,14 +3,14 @@ import { z } from 'zod'
 import { HostelRollStatus, LibraryAudience } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth, requirePermission } from '../../middleware/auth.js'
-import { body, query } from '../../middleware/validate.js'
+import { body, query, IsoDate } from '../../middleware/validate.js'
 import { env } from '../../config/env.js'
 import * as hostel from './hostel.service.js'
 import * as library from '../library/library.service.js'
 
 export const campusRouter = Router()
 const Id = z.string().uuid()
-const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+const Iso = IsoDate
 const H = 'Hostel'
 const L = 'Library'
 

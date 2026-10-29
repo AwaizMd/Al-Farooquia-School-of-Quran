@@ -189,7 +189,14 @@ export async function getMfaPolicy() {
   return prisma.mfaPolicy.findMany({ orderBy: { role: 'asc' }, select: { role: true, required: true } })
 }
 
+/** Roles that must always use MFA. The policy can add roles to this list but never remove them. */
+export const MFA_BASELINE: readonly Role[] = ['ADMIN', 'PRINCIPAL', 'MENTOR']
+
 export async function setMfaPolicy(req: Request, policy: { role: Role; required: boolean }[]) {
+  const lowered = policy.filter((p) => !p.required && MFA_BASELINE.includes(p.role)).map((p) => p.role)
+  if (lowered.length) {
+    throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'policy', message: `Two-step verification is always required for ${lowered.join(', ')}.` }])
+  }
   await prisma.$transaction(policy.map((p) => prisma.mfaPolicy.upsert({ where: { role: p.role }, update: { required: p.required }, create: p })))
   await audit({ action: 'security.mfa_policy_changed', summary: `MFA policy: ${policy.map((p) => `${p.role}=${p.required ? 'required' : 'optional'}`).join(', ')}`, entityType: 'mfa_policy', metadata: policy }, req)
   return getMfaPolicy()

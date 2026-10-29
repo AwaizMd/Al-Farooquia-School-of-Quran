@@ -306,3 +306,16 @@ describe('password reset and invitations', () => {
     expect(r.body.invite.setupLink).toMatch(/accept-invite\?token=/)
   })
 })
+
+describe('malformed input', () => {
+  it('answers NUL characters and undecodable addresses with 400, never a database error', async () => {
+    await makeUser({ email: 'p@x.test', roles: ['PARENT'] })
+    const c = client()
+    expect((await c.post('/api/v1/auth/login', { identifier: 'a\u0000b', password: 'x' })).status).toBe(400)
+    await c.post('/api/v1/auth/login', { identifier: 'p@x.test', password: PASSWORD })
+    for (const url of ['/api/v1/students/%00', '/api/v1/students?search=%00', '/api/v1/report-cards/S-1%00', '/api/v1/students/%C0%AF']) {
+      expect((await c.get(url)).status, url).toBe(400)
+    }
+    expect((await c.post('/api/v1/audit/events', { action: 'export.csv', entity: 'ab\u0000cd' })).status).toBe(400)
+  })
+})

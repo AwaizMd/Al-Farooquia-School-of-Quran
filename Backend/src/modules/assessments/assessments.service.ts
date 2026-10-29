@@ -125,8 +125,13 @@ export async function saveResults(req: Request, examRef: string, entries: Result
   if (exam.status === 'CANCELLED') throw conflict('EXAM_CANCELLED', 'This exam was cancelled.')
   const manage = auth.permissions.has('exams.manage')
   const ownStaff = await prisma.staffProfile.findUnique({ where: { userId: auth.user.id } })
-  const teachesAll = ownStaff && (exam.examinerId === ownStaff.id || (await prisma.groupMentorAssignment.count({ where: { staffId: ownStaff.id, endedAt: null, groupId: { in: exam.groups.map((g) => g.group.id) } } })) > 0)
-  if (!manage && !teachesAll) throw forbidden('Only the examiner or the halqa’s mentor can enter these marks.')
+  const isExaminer = !!ownStaff && exam.examinerId === ownStaff.id
+  // A mentor who is not the examiner may enter marks only for the halqas they teach,
+  // even when the exam also covers other halqas.
+  const taughtGroupIds = ownStaff && !isExaminer
+    ? (await prisma.groupMentorAssignment.findMany({ where: { staffId: ownStaff.id, endedAt: null, groupId: { in: exam.groups.map((g) => g.group.id) } }, select: { groupId: true } })).map((a) => a.groupId)
+    : []
+  if (!manage && !isExaminer && !taughtGroupIds.length) throw forbidden('Only the examiner or the halqa’s mentor can enter these marks.')
   if (exam.status === 'PUBLISHED' && !manage) throw forbidden('Results are published. Ask the office to correct them.')
   if (exam.status === 'PUBLISHED' && !reason) throw new AppError(422, 'REASON_REQUIRED', 'Give a reason for changing published results.')
   if (exam.date > toDate(await institutionToday())) throw new AppError(422, 'EXAM_NOT_HELD', 'Marks can be entered once the exam has been held.')
@@ -147,6 +152,10 @@ export async function saveResults(req: Request, examRef: string, entries: Result
   const ids = entries.map((e) => e.studentId)
   const eligible = await prisma.student.count({ where: { id: { in: ids }, groupId: { in: exam.groups.map((g) => g.group.id) } } })
   if (eligible !== new Set(ids).size || ids.length !== new Set(ids).size) throw new AppError(422, 'NOT_IN_EXAM', 'Some students do not sit this exam.')
+  if (!manage && !isExaminer) {
+    const own = await prisma.student.count({ where: { id: { in: ids }, groupId: { in: taughtGroupIds } } })
+    if (own !== ids.length) throw forbidden('You can enter marks only for students in your own halqas.')
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const e of entries) {

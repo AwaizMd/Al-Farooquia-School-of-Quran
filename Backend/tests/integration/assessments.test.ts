@@ -52,6 +52,17 @@ describe('exams and marks', () => {
     expect(outsider.body.error.code).toBe('NOT_IN_EXAM')
   })
 
+  it('a mentor who is not the examiner can mark only their own halqa in a joint exam', async () => {
+    const gC = await prisma.group.create({ data: { code: 'g-c', name: 'Halqa C', short: 'C', track: 'HIFZ', gender: 'BOYS' } })
+    await prisma.groupMentorAssignment.create({ data: { groupId: gC.id, staffId: fx.staff.m2.id } })
+    const other = await prisma.student.create({ data: { admissionNo: 'S-9', name: 'Other', gender: 'MALE', dob: new Date('2013-01-01'), admissionDate: new Date('2024-04-01'), groupId: gC.id, phone: '+91 90000 00009', enrollments: { create: { groupId: gC.id, startedOn: new Date('2024-04-01') } } } })
+    const exam = (await admin.post('/api/v1/exams', { title: 'Joint Test', type: 'Monthly Test', track: 'HIFZ', date: addDaysIso(today, -1), groupIds: [fx.groups.gA.id, gC.id], examinerId: fx.staff.m2.id })).body
+    const m = await as('m1@x.test')
+    expect((await m.put(`/api/v1/exams/${exam.code}/results`, { entries: [{ studentId: other.id, marks: hifzMarks(1, 1, 1, 1) }] })).status).toBe(403)
+    expect(await prisma.examResult.count({ where: { examId: exam.id } })).toBe(0)
+    expect((await m.put(`/api/v1/exams/${exam.code}/results`, { entries: [{ studentId: fx.students.ali.id, marks: hifzMarks(1, 1, 1, 1) }] })).status).toBe(200)
+  })
+
   it('the database itself refuses marks above the maximum', async () => {
     const exam = await heldExam()
     const subject = await prisma.examSubject.findFirstOrThrow({ where: { examId: exam.id } })

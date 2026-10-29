@@ -200,8 +200,11 @@ export async function issueInvoices(actor: Request | null, period: string, onlyS
   const today = await institutionToday()
   const settings = await prisma.institutionSettings.findUnique({ where: { id: 1 } })
   const dueDay = String(settings?.feeDueDay ?? 10).padStart(2, '0')
+  // Anyone admitted by the last day of the period is billed for it (day 0 of the next month).
+  const [y, m] = period.split('-').map(Number)
+  const periodEnd = new Date(Date.UTC(y!, m!, 0))
   const students = await prisma.student.findMany({
-    where: { status: 'ACTIVE', feePlanId: { not: null }, ...(onlyStudentId ? { id: onlyStudentId } : {}), admissionDate: { lte: toDate(`${period}-28`) } },
+    where: { status: 'ACTIVE', feePlanId: { not: null }, ...(onlyStudentId ? { id: onlyStudentId } : {}), admissionDate: { lte: periodEnd } },
     include: { feePlan: true, concessions: { where: { endedAt: null } } },
   })
   let created = 0

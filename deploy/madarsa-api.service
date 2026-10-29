@@ -1,0 +1,31 @@
+# API process. Install: copy to /etc/systemd/system/, then
+#   sudo systemctl daemon-reload && sudo systemctl enable --now madarsa-api
+# See Backend/docs/DEPLOYMENT.md.
+
+[Unit]
+Description=Al Farooquia MMS API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=madarsa
+Group=madarsa
+WorkingDirectory=/srv/madarsa/app/Backend
+EnvironmentFile=/etc/madarsa/env
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening: the process can write only to its own storage folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/madarsa/storage
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

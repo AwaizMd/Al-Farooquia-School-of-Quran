@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { AdjustmentKind } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth, requirePermission, requireRecentAuth } from '../../middleware/auth.js'
-import { body } from '../../middleware/validate.js'
+import { body, IsoDate } from '../../middleware/validate.js'
 import { paymentProvider } from '../../integrations/payments/index.js'
 import * as fees from './fees.service.js'
 import * as payments from './payments.service.js'
@@ -11,7 +11,7 @@ import * as payments from './payments.service.js'
 export const feesRouter = Router()
 const T = 'Fees'
 const Id = z.string().uuid()
-const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+const Iso = IsoDate
 const Minor = z.number().int().min(1).max(100_000_000)
 
 const ManualPayment = z.object({ studentId: Id, amountMinor: Minor, method: z.enum(['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE']), receivedOn: Iso.optional(), note: z.string().trim().max(300).optional(), invoiceIds: z.array(Id).max(24).optional() })

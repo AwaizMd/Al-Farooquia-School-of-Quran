@@ -15,6 +15,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   else if (err instanceof ZodError) appErr = validationFailed(err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })))
   else if (err?.type === 'entity.too.large') appErr = new AppError(413, 'PAYLOAD_TOO_LARGE', 'The request is too large.')
   else if (err?.type === 'entity.parse.failed') appErr = new AppError(400, 'BAD_JSON', 'The request body is not valid JSON.')
+  // Express could not decode a %-escape in the URL (e.g. /students/%C0%AF).
+  else if (err instanceof URIError) appErr = new AppError(400, 'BAD_REQUEST', 'The address contains invalid characters.')
   else {
     (req.log ?? logger).error({ err }, 'Unhandled error')
     appErr = new AppError(500, 'INTERNAL', 'Something went wrong. Please try again.')

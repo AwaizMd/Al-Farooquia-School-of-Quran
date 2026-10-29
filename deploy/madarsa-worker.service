@@ -1,0 +1,30 @@
+# Background worker (invoices, reminders, reports, message delivery). Install like madarsa-api.service:
+#   sudo systemctl enable --now madarsa-worker
+
+[Unit]
+Description=Al Farooquia MMS background worker
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=madarsa
+Group=madarsa
+WorkingDirectory=/srv/madarsa/app/Backend
+EnvironmentFile=/etc/madarsa/env
+ExecStart=/usr/bin/node dist/worker.js
+Restart=on-failure
+RestartSec=5
+# Allow in-flight jobs to finish on stop (the worker drains for up to 20 s).
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

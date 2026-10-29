@@ -3,13 +3,13 @@ import { z } from 'zod'
 import { AttendanceStatus, LearningCategory, RevisionDone, TajweedQuality, TargetStatus } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth } from '../../middleware/auth.js'
-import { body, query } from '../../middleware/validate.js'
+import { body, query, IsoDate } from '../../middleware/validate.js'
 import * as attendance from '../attendance/attendance.service.js'
 import * as learning from './learning.service.js'
 
 export const learningRouter = Router()
 
-const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.').refine((s) => !Number.isNaN(Date.parse(s)), 'Not a valid date.')
+const Iso = IsoDate
 const Id = z.string().uuid()
 const Rating = z.number().int().min(1).max(5)
 

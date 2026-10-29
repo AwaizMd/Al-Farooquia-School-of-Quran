@@ -52,6 +52,15 @@ describe('admissions', () => {
     expect(r.body.error.details.map((d: { path: string }) => d.path).sort()).toEqual(['dob', 'groupId', 'phone'])
   })
 
+  it('rejects impossible calendar dates instead of shifting them', async () => {
+    for (const dob of ['2015-02-30', '2015-13-01', '2015-04-31']) {
+      const r = await admin.post('/api/v1/students', { ...admission(), dob })
+      expect(r.status, dob).toBe(422)
+    }
+    const exam = await admin.post('/api/v1/exams', { title: 'Bad date', type: 'Monthly Test', track: 'HIFZ', date: '2026-13-45', groupIds: [fx.groups.gA.id] })
+    expect(exam.status).toBe(422)
+  })
+
   it('records a concession only with explicit permission and keeps its history', async () => {
     const r = await admin.patch('/api/v1/students/S-2', { concession: 'NEED_BASED' })
     expect(r.body.concession).toEqual({ kind: 'NEED_BASED', percent: 50 })

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ConcessionKind, Gender, StaffStatus, StudentStatus } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth, requirePermission } from '../../middleware/auth.js'
-import { body, query } from '../../middleware/validate.js'
+import { body, query, IsoDate } from '../../middleware/validate.js'
 import * as students from './students.service.js'
 import * as staff from '../staff/staff.service.js'
 import { issueInvoices } from '../fees/fees.service.js'
@@ -11,7 +11,7 @@ import { institutionToday } from '../../common/clock.js'
 
 export const peopleRouter = Router()
 
-const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.').refine((s) => !Number.isNaN(Date.parse(s)), 'Not a valid date.')
+const Iso = IsoDate
 const Phone = z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/, 'Enter a valid phone number.')
 const Id = z.string().uuid()
 const Page = { page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(500).default(100) }

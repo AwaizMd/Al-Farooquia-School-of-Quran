@@ -10,6 +10,7 @@ import { logger } from './common/logger.js'
 import { buildOpenApiDocument } from './docs/openapi.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { csrfProtection, loadSession } from './middleware/auth.js'
+import { rejectNulBytes } from './middleware/validate.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { healthRouter } from './modules/health/health.routes.js'
 import { adminRouter } from './modules/users/users.routes.js'
@@ -61,6 +62,7 @@ export function createApp() {
     next()
   })
   api.use('/health', healthRouter)
+  api.use(rejectNulBytes)
   api.use(loadSession, csrfProtection)
   api.use('/auth', authRouter)
   api.use('/admin', adminRouter)

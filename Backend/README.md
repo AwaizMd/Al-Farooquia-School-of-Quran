@@ -8,7 +8,7 @@ Express 5 + TypeScript API and background worker for the Al Farooquia Madarsa Ma
 
 ## Run locally
 
-Requirements: Node.js 22.12 or newer. You don't need Docker or a system PostgreSQL: development and tests run PostgreSQL 17 from the `embedded-postgres` npm package.
+Requirements: Node.js 22.12 or newer. You don't need a system PostgreSQL: development and tests run PostgreSQL 17 from the `embedded-postgres` npm package.
 
 ```bash
 cd Backend

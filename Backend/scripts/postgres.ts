@@ -1,5 +1,5 @@
 // Local PostgreSQL for development and tests, run from npm binaries so no
-// system install (or Docker) is needed. Production uses a real PostgreSQL server.
+// system install is needed. Production uses a real PostgreSQL server.
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import EmbeddedPostgres from 'embedded-postgres'

@@ -3,12 +3,12 @@ import { z } from 'zod'
 import { Track } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth, requirePermission } from '../../middleware/auth.js'
-import { body } from '../../middleware/validate.js'
+import { body, IsoDate } from '../../middleware/validate.js'
 import * as exams from './assessments.service.js'
 
 export const assessmentsRouter = Router()
 const T = 'Assessments'
-const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+const Iso = IsoDate
 const Ref = z.string().min(1).max(64)
 
 const CreateExam = z.object({
