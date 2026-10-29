@@ -86,8 +86,11 @@ export async function handleWebhook(providerName: string, rawBody: Buffer, heade
   try {
     await prisma.webhookEvent.create({ data: { provider: providerName, eventId: event.eventId, type: event.type, signatureValid: true, payload: JSON.parse(JSON.stringify(event.stored)) } })
   } catch (err) {
-    if ((err as { code?: string }).code === 'P2002') return { duplicate: true }
-    throw err
+    if ((err as { code?: string }).code !== 'P2002') throw err
+    // Seen before. If it was processed, this is a replay. If processing failed (the
+    // gateway then retries), process it again: processEvent is idempotent per attempt.
+    const seen = await prisma.webhookEvent.findUnique({ where: { provider_eventId: { provider: providerName, eventId: event.eventId } } })
+    if (seen?.processedAt) return { duplicate: true }
   }
   const result = await processEvent(event)
   await prisma.webhookEvent.update({ where: { provider_eventId: { provider: providerName, eventId: event.eventId } }, data: { processedAt: new Date(), result } })

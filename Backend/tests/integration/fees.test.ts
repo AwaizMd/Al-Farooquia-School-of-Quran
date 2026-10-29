@@ -3,7 +3,8 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../src/database/prisma.js'
 import { institutionToday } from '../../src/common/clock.js'
-import { fiscalYearOf, discountFor, issueInvoices } from '../../src/modules/fees/fees.service.js'
+import type { Request } from 'express'
+import { fiscalYearOf, discountFor, issueInvoices, receive, refundPayment } from '../../src/modules/fees/fees.service.js'
 import { razorpayProvider } from '../../src/integrations/payments/razorpay.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, app, client, type Client } from '../helpers/auth.js'
@@ -116,6 +117,25 @@ describe('office payments', () => {
     expect(await balanceOf(admin, 'S-2')).toBe(300000 - 150000 + 50000)
   })
 
+  it('concurrent refunds can never add up to more than the payment', async () => {
+    const p = (await admin.post('/api/v1/fees/payments', { studentId: fx.students.bilal.id, amountMinor: 40000, method: 'CASH' })).body
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    const rs = await Promise.all([1, 2, 3].map(() => admin.post(`/api/v1/fees/payments/${p.id}/refunds`, { amountMinor: 30000, reason: 'Concurrent refund' })))
+    expect(rs.map((r) => r.status).sort()).toEqual([200, 409, 409])
+    const refunded = await prisma.refund.aggregate({ where: { paymentId: p.id }, _sum: { amountMinor: true } })
+    expect(refunded._sum.amountMinor).toBe(30000)
+  })
+
+  it('a refund the gateway declines leaves the balance unchanged', async () => {
+    const req = { auth: { user: { id: fx.users.admin.id, displayName: 'Admin' }, roles: ['ADMIN'] }, ip: null, id: 'test' } as unknown as Request
+    const att = await prisma.paymentAttempt.create({ data: { reference: 'PA-T', studentId: fx.students.bilal.id, payerUserId: fx.users.otherParent.id, invoiceIds: [], amountMinor: 50000, currency: 'INR', provider: 'dev', status: 'SUCCEEDED', providerPaymentId: 'pay_t', expiresAt: new Date() } })
+    const pay = await prisma.$transaction((tx) => receive(tx, { studentId: fx.students.bilal.id, amountMinor: 50000, method: 'ONLINE', source: 'ONLINE', receivedOn: today, paymentAttemptId: att.id }, today))
+    const before = await balanceOf(admin, 'S-2')
+    await expect(refundPayment(req, pay.id, { amountMinor: 20000, reason: 'Declined refund' }, async () => ({ status: 'FAILED' }))).rejects.toMatchObject({ code: 'REFUND_FAILED' })
+    expect(await balanceOf(admin, 'S-2')).toBe(before)
+    expect(await prisma.refund.findFirstOrThrow({ where: { paymentId: pay.id }, include: { allocations: true } })).toMatchObject({ status: 'FAILED', allocations: [] })
+  })
+
   it('voids only invoices with no activity', async () => {
     const [prev] = (await admin.get('/api/v1/fees/students/S-2')).body.invoices.slice(-1)
     await admin.post('/api/v1/fees/payments', { studentId: fx.students.bilal.id, amountMinor: 1000, method: 'CASH' })
@@ -189,6 +209,21 @@ describe('online payments', () => {
     const status = (await p.get(`/api/v1/payments/attempts/${att.id}`)).body
     expect(status).toMatchObject({ status: 'SUCCEEDED', receiptNo: expect.stringMatching(/^NR-\d{4}-0001$/) })
     expect(await balanceOf(p, 'S-1')).toBe(0)
+  })
+
+  it('a gateway retry after a failed processing attempt still credits the payment', async () => {
+    const p = await as('p1@x.test')
+    const att = (await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).body
+    const event = { id: 'evt_crash', type: 'payment.succeeded', orderId: att.checkout.orderId, paymentId: 'pay_c', amountMinor: 135000, currency: 'INR' }
+    // The first delivery was recorded, then processing crashed before completing.
+    await prisma.webhookEvent.create({ data: { provider: 'dev', eventId: 'evt_crash', type: 'payment.succeeded', signatureValid: true, payload: event } })
+    const { raw, sig } = signDev(event)
+    const retry = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
+    expect(retry.body).toEqual({ received: true, duplicate: false })
+    expect(await prisma.payment.count()).toBe(1)
+    expect(await balanceOf(p, 'S-1')).toBe(0)
+    const replay = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
+    expect(replay.body.duplicate).toBe(true)
   })
 
   it('a gateway amount that does not match is not credited', async () => {

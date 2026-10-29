@@ -16,7 +16,6 @@ const INVOICE_INCLUDE = {
   refundParts: { select: { amountMinor: true } },
 } as const
 
-const money = (minor: number, currency: string) => new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(minor / 100)
 const monthName = (period: string) => new Date(`${period}-15T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 export async function getRules() {
@@ -54,7 +53,7 @@ async function queueForInvoice(invoiceId: string, stage: string, channels: Notif
   const [template, settings] = await Promise.all([getTemplate(), prisma.institutionSettings.findUnique({ where: { id: 1 } })])
   let queued = 0
   for (const g of await guardiansOf(prisma, inv.studentId, { fees: true })) {
-    const vars = { guardian: g.name, student: inv.student.name, madarsa: settings?.brandName ?? 'the Madarsa', period: monthName(inv.period), dueDate: isoDate(inv.dueDate)!, balance: money(view.balanceMinor, inv.currency) }
+    const vars = { guardian: g.name, student: inv.student.name, madarsa: settings?.brandName ?? 'the Madarsa', period: monthName(inv.period), dueDate: isoDate(inv.dueDate)!, balance: '{balance}' } // filled in with the live balance when the message is sent
     for (const channel of channels) {
       if (channel === 'IN_APP' && !g.userId) continue
       const recipient = channel === 'EMAIL' ? g.email : channel === 'IN_APP' ? null : g.phone

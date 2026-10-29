@@ -91,6 +91,12 @@ describe('student visibility is enforced on the server', () => {
     expect((await p.put(`/api/v1/groups/${fx.groups.gA.id}/mentor`, { staffId: fx.staff.m2.id })).status).toBe(403)
   })
 
+  it('marks which staff teach: mentors yes, the Principal\'s own staff record no', async () => {
+    await prisma.staffProfile.create({ data: { code: 'st-p', displayName: 'Principal Profile', title: 'Principal', userId: fx.users.principal.id } })
+    const staff = (await (await as('admin@x.test')).get('/api/v1/staff')).body.items as { code: string; teaches: boolean }[]
+    expect(Object.fromEntries(staff.map((s) => [s.code, s.teaches]))).toEqual({ m1: true, m2: true, 'st-p': false })
+  })
+
   it('families see only their own halqas and mentors', async () => {
     const p = await as('p2@x.test')
     expect((await p.get('/api/v1/groups')).body.items.map((g: { code: string }) => g.code)).toEqual(['g-a'])

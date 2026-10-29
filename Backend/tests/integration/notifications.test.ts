@@ -52,6 +52,18 @@ describe('fee reminders', () => {
     expect((await p.get('/api/v1/notifications')).body.items[0]).toMatchObject({ title: 'Fee reminder for Ali', category: 'FEES' })
   })
 
+  it('states the balance at the time of sending, after a partial payment', async () => {
+    const inv = await invoiceDue(fx.students.ali.id, addDaysIso(today, 3))
+    await runReminders(today)
+    const admin = await as('admin@x.test')
+    await admin.post('/api/v1/fees/payments', { studentId: fx.students.ali.id, amountMinor: 50000, method: 'CASH', invoiceIds: [inv.id] })
+    testOutbox.length = 0
+    await deliverDue()
+    expect(testOutbox[0]!.text).toContain('₹1,000.00')
+    const p = await as('p1@x.test')
+    expect((await p.get('/api/v1/notifications')).body.items.find((n: { title: string }) => n.title.startsWith('Fee reminder')).body).toContain('₹1,000.00')
+  })
+
   it('a reminder is skipped, not sent, once the balance has been paid', async () => {
     const inv = await invoiceDue(fx.students.ali.id, addDaysIso(today, 3))
     await runReminders(today)

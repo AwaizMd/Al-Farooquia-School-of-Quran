@@ -270,21 +270,19 @@ export async function voidInvoice(req: Request, invoiceId: string, reason: strin
  * most recent invoice allocations, whose balances become due again.
  */
 export async function refundPayment(req: Request, paymentId: string, input: { amountMinor: number; reason: string }, providerRefund?: (providerPaymentId: string, amountMinor: number) => Promise<{ status: 'COMPLETED' | 'PENDING' | 'FAILED'; providerRef?: string | undefined }>) {
-  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, include: { allocations: { include: { invoice: { select: { dueDate: true } } } }, refunds: { include: { allocations: true } }, attempt: true } })
-  if (!payment) throw notFound()
-  const refunded = payment.refunds.filter((r) => r.status !== 'FAILED').reduce((a, r) => a + r.amountMinor, 0)
-  if (input.amountMinor > payment.amountMinor - refunded) throw new AppError(409, 'REFUND_TOO_LARGE', 'The refund is more than what remains of this payment.', { refundableMinor: payment.amountMinor - refunded })
-  let status: 'COMPLETED' | 'PENDING' | 'FAILED' = 'COMPLETED'
-  let providerRef: string | undefined
-  if (payment.source === 'ONLINE') {
-    if (!providerRefund || !payment.attempt?.providerPaymentId) throw conflict('REFUND_UNAVAILABLE', 'This online payment cannot be refunded automatically. Refund it from the gateway dashboard and record it here.')
-    const r = await providerRefund(payment.attempt.providerPaymentId, input.amountMinor)
-    status = r.status
-    providerRef = r.providerRef
-    if (status === 'FAILED') throw new AppError(502, 'REFUND_FAILED', 'The payment gateway declined the refund. Nothing was changed.')
-  }
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM students WHERE id = ${payment.studentId}::uuid FOR UPDATE`
+  const found = await prisma.payment.findUnique({ where: { id: paymentId }, include: { attempt: true } })
+  if (!found) throw notFound()
+  const online = found.source === 'ONLINE'
+  const providerPaymentId = found.attempt?.providerPaymentId
+  if (online && (!providerRefund || !providerPaymentId)) throw conflict('REFUND_UNAVAILABLE', 'This online payment cannot be refunded automatically. Refund it from the gateway dashboard and record it here.')
+
+  // Check and reserve the refund under the student lock, re-reading the payment there,
+  // so concurrent refunds can never add up to more than the payment.
+  const refund = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM students WHERE id = ${found.studentId}::uuid FOR UPDATE`
+    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { allocations: { include: { invoice: { select: { dueDate: true } } } }, refunds: { include: { allocations: true } } } })
+    const refunded = payment.refunds.filter((r) => r.status !== 'FAILED').reduce((a, r) => a + r.amountMinor, 0)
+    if (input.amountMinor > payment.amountMinor - refunded) throw new AppError(409, 'REFUND_TOO_LARGE', 'The refund is more than what remains of this payment.', { refundableMinor: payment.amountMinor - refunded })
     // What is still allocated per invoice after earlier refunds.
     const refundedPerInvoice = new Map<string, number>()
     for (const r of payment.refunds) if (r.status !== 'FAILED') for (const a of r.allocations) refundedPerInvoice.set(a.invoiceId, (refundedPerInvoice.get(a.invoiceId) ?? 0) + a.amountMinor)
@@ -298,10 +296,31 @@ export async function refundPayment(req: Request, paymentId: string, input: { am
       if (take > 0) parts.push({ invoiceId: a.invoiceId, amountMinor: take })
       left -= take
     }
-    const refund = await tx.refund.create({ data: { paymentId, amountMinor: input.amountMinor, reason: input.reason, status, providerRef: providerRef ?? null, createdById: req.auth!.user.id, allocations: { create: parts } } })
-    await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (${status.toLowerCase()}) — ${input.reason}`, entityType: 'student', entityId: payment.studentId, metadata: { paymentId, refundId: refund.id } }, req, tx)
-    return { id: refund.id, status, amountMinor: refund.amountMinor }
+    // Online refunds stay PENDING (reserved) until the gateway answers.
+    const r = await tx.refund.create({ data: { paymentId, amountMinor: input.amountMinor, reason: input.reason, status: online ? 'PENDING' : 'COMPLETED', createdById: req.auth!.user.id, allocations: { create: parts } } })
+    if (!online) await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (completed) — ${input.reason}`, entityType: 'student', entityId: payment.studentId, metadata: { paymentId, refundId: r.id } }, req, tx)
+    return r
   })
+  if (!online) return { id: refund.id, status: refund.status, amountMinor: refund.amountMinor }
+
+  let status: 'COMPLETED' | 'PENDING' | 'FAILED'
+  try {
+    const r = await providerRefund!(providerPaymentId!, input.amountMinor)
+    status = r.status
+    if (status === 'FAILED') {
+      // Release the reservation: the balance goes back to what it was.
+      await prisma.$transaction([prisma.refundAllocation.deleteMany({ where: { refundId: refund.id } }), prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } })])
+    } else {
+      await prisma.refund.update({ where: { id: refund.id }, data: { status, providerRef: r.providerRef ?? null } })
+    }
+  } catch (err) {
+    // Unknown outcome (e.g. the gateway timed out): keep it PENDING for the office to check.
+    await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} sent to the gateway with no answer; check the gateway dashboard — ${input.reason}`, entityType: 'student', entityId: found.studentId, metadata: { paymentId, refundId: refund.id } }, req)
+    throw err
+  }
+  await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (${status.toLowerCase()}) — ${input.reason}`, entityType: 'student', entityId: found.studentId, metadata: { paymentId, refundId: refund.id } }, req)
+  if (status === 'FAILED') throw new AppError(502, 'REFUND_FAILED', 'The payment gateway declined the refund. Nothing was changed.')
+  return { id: refund.id, status, amountMinor: refund.amountMinor }
 }
 
 export function assertCanPay(auth: AuthContext) {

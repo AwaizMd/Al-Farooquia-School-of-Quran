@@ -72,7 +72,8 @@ export async function loadPeople(user) {
     students: mapped,
     parents,
     groups: groups.map(toGroup),
-    mentors: staff.map(toMentor),
+    // Only teaching staff are mentors; the Principal's or Warden's staff record is not.
+    mentors: staff.filter((s) => s.teaches !== false).map(toMentor),
     feePlans: plans.map((p) => ({ id: p.code, uuid: p.id, name: p.name, amount: p.amountMinor / 100, cycle: p.cycle === 'MONTHLY' ? 'Monthly' : p.cycle, covers: p.covers ?? '' })),
   }
 }

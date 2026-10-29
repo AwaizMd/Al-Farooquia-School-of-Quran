@@ -30,15 +30,20 @@ export async function listGroups(req: Request) {
   }
 }
 
-const fullStaff = (s: Prisma.StaffProfileGetPayload<{ include: { assignments: { where: { endedAt: null }; include: { group: true } } } }>) => ({
+const STAFF_INCLUDE = { assignments: { where: { endedAt: null }, include: { group: true } }, user: { select: { roles: { select: { role: true } } } } } satisfies Prisma.StaffProfileInclude
+
+/** Teaching staff: anyone with a halqa, without an account, or whose account has the Mentor role (not, say, the Principal or Warden). */
+const teaches = (s: Prisma.StaffProfileGetPayload<{ include: typeof STAFF_INCLUDE }>) => s.assignments.length > 0 || !s.user || s.user.roles.some((r) => r.role === 'MENTOR')
+
+const fullStaff = (s: Prisma.StaffProfileGetPayload<{ include: typeof STAFF_INCLUDE }>) => ({
   id: s.id, code: s.code, displayName: s.displayName, title: s.title, phone: s.phone, email: s.email, joinedOn: isoDate(s.joinedOn), status: s.status,
-  qualification: s.qualification, specialisation: s.specialisation, hasAccount: !!s.userId,
+  qualification: s.qualification, specialisation: s.specialisation, hasAccount: !!s.userId, teaches: teaches(s),
   groups: s.assignments.map((a) => ({ id: a.group.id, code: a.group.code, name: a.group.name })),
 })
 
 /** Staff directory. Without staff.read, only the mentors of visible students' halqas, by name and title. */
 export async function listStaff(req: Request) {
-  const include = { assignments: { where: { endedAt: null }, include: { group: true } } } as const
+  const include = STAFF_INCLUDE
   if (req.auth!.permissions.has('staff.read')) {
     const rows = await prisma.staffProfile.findMany({ include, orderBy: { code: 'asc' } })
     return { items: rows.map(fullStaff) }
@@ -65,7 +70,7 @@ export async function createStaff(req: Request, input: StaffInput) {
     const [row] = await tx.$queryRaw<{ n: bigint }[]>`SELECT nextval('staff_code_seq') AS n`
     const s = await tx.staffProfile.create({
       data: { code: `ST-${String(row!.n).padStart(3, '0')}`, displayName: input.displayName.trim(), title: input.title.trim(), phone: input.phone?.trim() || null, email: input.email?.trim().toLowerCase() || null, joinedOn: input.joinedOn ? toDate(input.joinedOn) : null, qualification: input.qualification?.trim() || null, specialisation: input.specialisation?.trim() || null },
-      include: { assignments: { where: { endedAt: null }, include: { group: true } } },
+      include: STAFF_INCLUDE,
     })
     await audit({ action: 'staff.created', summary: `Staff profile created: ${s.title}`, entityType: 'staff', entityId: s.id }, req, tx)
     return s
@@ -74,13 +79,13 @@ export async function createStaff(req: Request, input: StaffInput) {
 }
 
 export async function setStaffStatus(req: Request, id: string, status: StaffStatus) {
-  const s = await prisma.staffProfile.findUnique({ where: { id }, include: { assignments: { where: { endedAt: null }, include: { group: true } } } })
+  const s = await prisma.staffProfile.findUnique({ where: { id }, include: STAFF_INCLUDE })
   if (!s) throw notFound()
   if (status === 'INACTIVE' && s.assignments.length) {
     throw conflict('STAFF_ASSIGNED', `Assign another mentor to ${s.assignments.map((a) => a.group.name).join(', ')} before marking this mentor inactive.`)
   }
   const updated = await prisma.$transaction(async (tx) => {
-    const u = await tx.staffProfile.update({ where: { id }, data: { status }, include: { assignments: { where: { endedAt: null }, include: { group: true } } } })
+    const u = await tx.staffProfile.update({ where: { id }, data: { status }, include: STAFF_INCLUDE })
     await audit({ action: 'staff.status_changed', summary: `Marked ${status.toLowerCase()}`, entityType: 'staff', entityId: id }, req, tx)
     return u
   })

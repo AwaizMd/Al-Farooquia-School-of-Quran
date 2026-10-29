@@ -14,6 +14,8 @@ const MAX_ATTEMPTS = BACKOFF_MIN.length + 1
 
 export const render = (template: string, vars: Record<string, string>) => template.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m)
 
+export const money = (minor: number, currency: string) => new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(minor / 100)
+
 /**
  * Whether a channel may be used for this person and topic.
  * In-app and email are on unless the person opted out; WhatsApp and SMS need
@@ -100,11 +102,16 @@ export async function deliverDue(limit = 50) {
     const d = (await prisma.notificationDelivery.findUnique({ where: { id } }))!
     if (d.invoiceId) {
       const inv = await prisma.invoice.findUnique({ where: { id: d.invoiceId }, include: { plan: { select: { code: true, name: true } }, student: { select: { admissionNo: true, name: true } }, allocations: { select: { amountMinor: true, paymentId: true } }, adjustments: { select: { amountMinor: true, kind: true, reason: true, createdAt: true } }, refundParts: { select: { amountMinor: true } } } })
-      if (!inv || invoiceView(inv, today).balanceMinor === 0) {
+      const balanceMinor = inv ? invoiceView(inv, today).balanceMinor : 0
+      if (!inv || balanceMinor === 0) {
         await prisma.notificationDelivery.update({ where: { id }, data: { status: 'SKIPPED', lastError: 'balance_cleared' } })
         out.skipped++
         continue
       }
+      // Fee reminders state the balance as it is now, not when they were queued.
+      const live = { balance: money(balanceMinor, inv.currency) }
+      d.subject = render(d.subject, live)
+      d.body = render(d.body, live)
     }
     if (d.channel === 'IN_APP') {
       if (d.userId) await notifyUsers(prisma, [d.userId], { category: d.category, title: d.subject, body: d.body, link: d.category === 'FEES' ? '/fees' : '/progress-report' })
