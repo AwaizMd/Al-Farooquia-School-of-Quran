@@ -133,7 +133,7 @@ export async function loadFees() {
       adjusted: i.adjustedMinor / 100, amount: i.dueMinor / 100, issuedOn: i.issuedOn, dueDate: i.dueDate,
     })),
     payments: r.payments.flatMap((p) => p.allocations
-      .map((a) => ({ id: `${p.id}:${a.invoiceId}`, paymentId: p.id, receiptNo: p.receiptNo, studentId: p.admissionNo, invoiceId: a.invoiceId, amount: (a.amountMinor - a.refundedMinor) / 100, date: p.receivedOn, method: METHOD_LABEL[p.method], recordedBy: p.recordedBy, note: p.note ?? '' }))
+      .map((a) => ({ id: `${p.id}:${a.invoiceId}`, paymentId: p.id, receiptNo: p.receiptNo, studentId: p.admissionNo, invoiceId: a.invoiceId, amount: (a.amountMinor - a.refundedMinor) / 100, date: p.receivedOn, method: METHOD_LABEL[p.method], recordedBy: p.recordedBy, note: p.note ?? '', reference: p.reference ?? '', source: p.source }))
       .filter((x) => x.amount > 0)),
   }
 }

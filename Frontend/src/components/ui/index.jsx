@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useId, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { X, Search, ChevronRight, Inbox } from 'lucide-react'
@@ -280,7 +281,9 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
     }
   }, [open, onClose])
   const width = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl' }[size]
-  return (
+  // Rendered into <body>: an animated page wrapper (will-change: transform) would otherwise
+  // become the containing block of this fixed overlay and push it off-screen on long pages.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={t(title)}>
@@ -301,7 +304,8 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
 

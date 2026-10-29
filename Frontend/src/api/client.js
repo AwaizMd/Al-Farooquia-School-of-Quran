@@ -82,3 +82,13 @@ export function takeUrlToken() {
   }
   return token
 }
+
+/** Fetch a private file (QR image, proof of payment) and return an object URL for <img> or a new tab. */
+export async function blobUrl(path) {
+  const res = await fetch(BASE + path, { credentials: CREDENTIALS })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, data?.error?.code || 'HTTP_' + res.status, data?.error?.message || 'Could not load the file.')
+  }
+  return URL.createObjectURL(await res.blob())
+}

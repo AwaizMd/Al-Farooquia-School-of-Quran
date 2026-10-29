@@ -48,6 +48,37 @@ describe.each(Object.keys(PERSONAS))('%s', (persona) => {
   })
 })
 
+describe('fee payment methods', () => {
+  it('a parent sees only the methods the Madarsa offers, with bank details to copy', async () => {
+    await boot('parent', '/fees')
+    await screen.findByRole('button', { name: /pay fees/i }, { timeout: 5000 })
+    await act(async () => { screen.getByRole('button', { name: /pay fees/i }).click() })
+    await screen.findByRole('radio', { name: /pay online/i })
+    // Dialogs live directly in <body>, so an animated page wrapper cannot push them off-screen.
+    expect(document.querySelector('[role=dialog]').parentElement).toBe(document.body)
+    expect(screen.getByRole('radio', { name: /bank transfer/i })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: /upi qr/i })).toBeNull() // not offered by this Madarsa
+    await act(async () => { screen.getByRole('radio', { name: /bank transfer/i }).click() })
+    await act(async () => { screen.getByRole('button', { name: /continue/i }).click() })
+    await screen.findByText('123456789012')
+    expect(screen.getByLabelText(/transaction reference/i)).toBeTruthy()
+    expect(screen.getByText(/stays outstanding until the Madarsa office/i)).toBeTruthy()
+  })
+
+  it('shows reported payments as pending verification, not paid', async () => {
+    await boot('parent', '/fees')
+    await screen.findByText('Bank transfer & UPI payments', {}, { timeout: 5000 })
+    expect(screen.getByText('Pending verification')).toBeTruthy()
+  })
+
+  it('the Principal can open Payment Verification but not approve; payment settings are admin-only', async () => {
+    await boot('principal', '/payment-verification')
+    await screen.findByText(/Approving or rejecting them is done by the administration/i, {}, { timeout: 5000 })
+    await act(async () => { window.history.pushState({}, '', '/payment-settings'); window.dispatchEvent(new PopStateEvent('popstate')) })
+    await screen.findByText('Not available for this role')
+  })
+})
+
 describe('server-scoped data reaches the screens', () => {
   it('a parent only ever holds their own children', async () => {
     await boot('parent', '/dashboard')

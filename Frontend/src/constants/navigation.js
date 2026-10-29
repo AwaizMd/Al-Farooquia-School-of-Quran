@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, UserRound, CalendarCheck, BookOpenCheck, ClipboardList, Wallet, BellRing, BedDouble,
-  Library, BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck,
+  Library, BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck, BadgeCheck, Landmark,
 } from 'lucide-react'
 
 // Role-aware navigation. These are UI restrictions for the demo only — a
@@ -22,7 +22,9 @@ export const NAV = {
       ] },
       { title: 'Finance & Campus', items: [
         { to: '/fees', label: 'Fees', icon: Wallet },
+        { to: '/payment-verification', label: 'Payment Verification', icon: BadgeCheck },
         { to: '/reminders', label: 'Fee Reminders', icon: BellRing },
+        { to: '/payment-settings', label: 'Fee Payment Settings', icon: Landmark },
         { to: '/hostel', label: 'Hostel', icon: BedDouble },
       ] },
       { title: 'Insights', items: [
@@ -56,6 +58,7 @@ export const NAV = {
       ] },
       { title: 'Insights', items: [
         { to: '/fees', label: 'Fees', icon: Wallet },
+        { to: '/payment-verification', label: 'Payment Verification', icon: BadgeCheck },
         { to: '/reports', label: 'Reports', icon: BarChart3 },
         { to: '/progress-report', label: 'Progress Reports', icon: FileText },
         { to: '/audit', label: 'Activity Log', icon: History },
@@ -149,6 +152,8 @@ export const ROUTE_ROLES = {
   '/sabaq/new': ['admin', 'mentor'],
   '/fees': ['admin', 'principal', 'student', 'parent'],
   '/reminders': ['admin'],
+  '/payment-settings': ['admin'],
+  '/payment-verification': ['admin', 'principal'],
   '/hostel': ['admin', 'warden'],
   '/reports': ['admin', 'principal'],
   '/audit': ['admin', 'principal'],
@@ -165,6 +170,6 @@ export const PAGE_TITLES = [
   ['/dashboard', 'Dashboard'], ['/students/new', 'Add Student'], ['/students', 'Students'], ['/mentors', 'Mentors'],
   ['/attendance', 'Attendance'], ['/sabaq/new', 'Record Sabaq'], ['/sabaq', 'Sabaq Records'], ['/journey', 'Learning'],
   ['/progress-report', 'Progress Report'], ['/exams', 'Examinations'], ['/report-card', 'Report Card'], ['/fees', 'Fees'],
-  ['/reminders', 'Fee Reminders'], ['/hostel', 'Hostel'], ['/library', 'Library'], ['/reports', 'Reports'],
+  ['/reminders', 'Fee Reminders'], ['/payment-settings', 'Fee Payment Settings'], ['/payment-verification', 'Payment Verification'], ['/hostel', 'Hostel'], ['/library', 'Library'], ['/reports', 'Reports'],
   ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/account/security', 'Account security'],
 ]

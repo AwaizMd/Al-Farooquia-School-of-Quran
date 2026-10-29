@@ -10,6 +10,7 @@ import { PageHeader, Card, CardHeader, Button, Tabs, SearchInput, Select, Input,
 import ChildSwitcher from '../../components/cards/ChildSwitcher'
 import { FeeBadge } from '../../components/cards/StatusBadges'
 import { FeeSummary, InvoiceList, PaymentHistory, ReceiptModal, RecordPaymentModal, CheckoutModal, groupReceipts } from '../../features/fees/FeeViews'
+import { SubmissionsCard } from '../../features/fees/PaymentMethods'
 import { studentFees, feeTotals } from '../../services/selectors'
 import { FEE_STATUS, PAYMENT_METHODS } from '../../constants/labels'
 import { money, pct } from '../../utils/format'
@@ -26,6 +27,7 @@ function MyFees() {
   const { child, isParent } = useActiveChild()
   const [pay, setPay] = useState(false)
   const [receipt, setReceipt] = useState(null)
+  const [submittedAt, setSubmittedAt] = useState(0)
   if (!child) return null
   const cur = state.settings.currency
   const fees = studentFees(state, idx, child.id)
@@ -47,9 +49,10 @@ function MyFees() {
           <Card><CardHeader title={t("Invoices")} subtitle={t("Monthly fee for the period")} /><div className="mt-2"><InvoiceList invoices={fees.invoices} currency={cur} /></div></Card>
           <Card><CardHeader title={t("Payment history")} subtitle={t("Tap a payment to view its receipt")} /><div className="mt-2"><PaymentHistory payments={fees.payments} currency={cur} onReceipt={setReceipt} /></div></Card>
         </div>
+        <SubmissionsCard student={child} currency={cur} refreshKey={submittedAt} onResubmit={isParent ? () => setPay(true) : undefined} />
         {!isParent && <p className="text-center text-[12.5px] text-ink-muted">{t("Payments are made by your guardian. Only your own fee records are shown.")}</p>}
       </div>
-      {isParent && <CheckoutModal open={pay} onClose={() => setPay(false)} student={child} />}
+      {isParent && <CheckoutModal open={pay} onClose={() => setPay(false)} student={child} onSubmitted={() => setSubmittedAt(Date.now())} />}
       <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} />
     </div>
   )

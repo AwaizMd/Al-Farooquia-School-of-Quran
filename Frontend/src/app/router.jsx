@@ -23,6 +23,8 @@ import ExamDetail from '../pages/shared/ExamDetail'
 import ReportCard from '../pages/shared/ReportCard'
 import Fees from '../pages/shared/Fees'
 import Reminders from '../pages/admin/Reminders'
+import PaymentSettings from '../pages/admin/PaymentSettings'
+import PaymentVerification from '../pages/admin/PaymentVerification'
 import Hostel from '../pages/admin/Hostel'
 import Library from '../pages/shared/Library'
 import Reports from '../pages/admin/Reports'
@@ -108,6 +110,8 @@ export default function AppRoutes() {
         <Route path="/report-card/:id" element={<Gate path="/exams"><ReportCard /></Gate>} />
         <Route path="/fees" element={<Gate path="/fees"><Fees /></Gate>} />
         <Route path="/reminders" element={<Gate path="/reminders"><Reminders /></Gate>} />
+        <Route path="/payment-settings" element={<Gate path="/payment-settings"><PaymentSettings /></Gate>} />
+        <Route path="/payment-verification" element={<Gate path="/payment-verification"><PaymentVerification /></Gate>} />
         <Route path="/hostel" element={<Gate path="/hostel"><Hostel /></Gate>} />
         <Route path="/library" element={<Gate path="/library"><Library /></Gate>} />
         <Route path="/reports" element={<Gate path="/reports"><Reports /></Gate>} />
