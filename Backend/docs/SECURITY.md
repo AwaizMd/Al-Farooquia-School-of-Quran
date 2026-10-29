@@ -22,7 +22,7 @@ This document lists what is implemented and tested, and what is not. Installing 
 | Data exposure | Generic 500 responses (no stack traces or SQL); structured logs redact cookies, tokens, passwords, codes and secrets; API responses `Cache-Control: no-store`; the web app keeps no records in browser storage | `middleware/errorHandler.ts`, `common/logger.ts` |
 | Headers | Helmet on the API; HSTS, CSP, frame-ancestors, referrer and permissions policy in the Caddyfile | `app.ts`, `deploy/Caddyfile` |
 | Configuration | Environment validated at start-up; production refuses insecure cookies, missing CORS origins, file-based email and the development payment gateway | `config/env.ts` |
-| Dependencies | `npm audit` reports 0 known vulnerabilities in the API and the web app (checked 2026-10-29) | — |
+| Dependencies | `npm audit` reports 0 known vulnerabilities in the API and the web app (checked 2026-10-30) | — |
 
 ## Known limitations and remaining work
 

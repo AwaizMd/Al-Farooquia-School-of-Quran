@@ -4,6 +4,7 @@ Express 5 + TypeScript API and background worker for the Al Farooquia Madarsa Ma
 
 - Deployment, backups, secret rotation and providers: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Security controls and known limitations: [docs/SECURITY.md](docs/SECURITY.md)
+- QA audit (30 Oct 2026): what was tested, defects found and fixed, what remains: [docs/QA-REPORT.md](docs/QA-REPORT.md)
 - API reference: http://localhost:4000/api/docs when `API_DOCS_ENABLED=true` (OpenAPI 3.1 at `/api/docs/openapi.json`)
 
 ## Run locally
@@ -52,7 +53,7 @@ It also creates one sign-in per role. The password for all of them is `farooquia
 
 | Script | What it does |
 |---|---|
-| `npm test` | 140 unit, integration and security tests against a throwaway PostgreSQL (never the dev database) |
+| `npm test` | 152 unit, integration and security tests against a throwaway PostgreSQL (never the dev database) |
 | `npm run typecheck` / `npm run lint` | TypeScript and ESLint |
 | `npm run build` | Compile to `dist/` |
 | `npm start` / `npm run worker` | Run the compiled API / worker |

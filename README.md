@@ -29,7 +29,7 @@ Sign in with one of the development accounts listed in [Backend/README.md](Backe
 
 ```bash
 npm test                     # web app: renders every page for every role against a fake API
-cd Backend && npm test       # API: 140 unit, integration and security tests on a throwaway database
+cd Backend && npm test       # API: 152 unit, integration and security tests on a throwaway database
 ```
 
 ## What each role can do
