@@ -22,7 +22,7 @@ npm run dev                 # terminal 2: API on http://localhost:4000
 npm run dev:worker          # terminal 3: scheduled jobs (invoices, reminders, reports, message delivery)
 ```
 
-Then run `npm run dev` in the repository root for the web app (http://localhost:5173). Vite forwards `/api` to the backend.
+Then run `npm run dev` in `Frontend/` for the web app (http://localhost:5173). Vite forwards `/api` to the backend.
 
 - Development emails are written to `Backend/.local/outbox/`.
 - Uploaded library files go to `Backend/storage/`.

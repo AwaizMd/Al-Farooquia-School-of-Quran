@@ -1,4 +1,4 @@
-// Development only: loads the frontend's fictional people (src/data) into the
+// Development only: loads the frontend's fictional people (Frontend/src/data) into the
 // database with the same codes, so screens that still read the in-browser demo
 // dataset line up with the records served by the API.
 import { pathToFileURL } from 'node:url'
@@ -8,7 +8,7 @@ import type { PrismaClient } from '../src/generated/prisma/client.js'
 import type { ConcessionKind, GroupGender, Track } from '../src/generated/prisma/enums.js'
 
 type Any = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
-const load = async (file: string): Promise<Any> => import(pathToFileURL(resolve('..', 'src', 'data', file)).href)
+const load = async (file: string): Promise<Any> => import(pathToFileURL(resolve('..', 'Frontend', 'src', 'data', file)).href)
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const KIND: Record<string, ConcessionKind> = { 'Sibling concession': 'SIBLING', 'Need-based concession': 'NEED_BASED', 'Full sponsorship (Yateem fund)': 'FULL_SPONSORSHIP' }
@@ -190,7 +190,7 @@ export async function seedCampus(prisma: PrismaClient, today: string) {
     const created = new Date(`${addDaysIso(today, item.uploaded)}T09:00:00Z`)
     let fileId: string | null = null
     if (item.file) {
-      const bytes = await readFile(resolve('..', 'public', item.file.replace(/^\//, '')))
+      const bytes = await readFile(resolve('..', 'Frontend', 'public', item.file.replace(/^\//, '')))
       const key = `library/${randomUUID()}.pdf`
       await store.put(key, bytes, 'application/pdf')
       fileId = (await prisma.storedFile.create({ data: { storageKey: key, originalName: item.file.split('/').pop(), mimeType: 'application/pdf', sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } })).id

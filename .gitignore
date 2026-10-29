@@ -4,10 +4,15 @@ dist
 *.log
 .DS_Store
 
-# Backend: secrets, generated code, local database and uploaded files
+# Secrets: never commit environment files (examples are fine)
 .env
 .env.*
 !.env.example
+
+# Backend: generated code, local database and uploaded/private files (library, payment proofs, QR codes)
 Backend/src/generated/
 Backend/.local/
 Backend/storage/
+
+# Frontend tool caches
+Frontend/node_modules/.vite/

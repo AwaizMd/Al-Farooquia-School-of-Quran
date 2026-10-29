@@ -1,4 +1,4 @@
-import { get } from './client'
+import { apiUrl, get } from './client'
 
 // Converts API people records into the shapes the existing screens use.
 // Screens keep human-readable codes as ids (admission number, staff/guardian/
@@ -161,7 +161,7 @@ export async function loadCampus(user) {
   return {
     library: library.items.map((r) => ({
       id: r.id, title: r.title, category: r.category, type: r.type, author: r.author ?? '', description: r.description ?? '', pages: r.pages, uploaded: r.uploadedAt.slice(0, 10), uploadedBy: r.uploadedBy,
-      access: AUDIENCE_LABEL[r.audience], canOpen: r.canOpen, file: r.file ? `/api/v1/library/${r.id}/file` : null, fileName: r.file?.name ?? null, mimeType: r.file?.mimeType ?? null,
+      access: AUDIENCE_LABEL[r.audience], canOpen: r.canOpen, file: r.file ? apiUrl(`/library/${r.id}/file`) : null, fileName: r.file?.name ?? null, mimeType: r.file?.mimeType ?? null,
     })),
     rooms: hostel ? hostel.rooms.map((r) => ({ id: r.code, uuid: r.id, block: r.block, floor: r.floor, beds: r.beds.length })) : [],
     beds: hostel ? hostel.rooms.flatMap((r) => r.beds.map((b) => ({ id: b.id, roomId: r.code, label: b.label, studentId: b.occupant?.admissionNo ?? null }))) : [],

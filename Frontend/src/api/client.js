@@ -1,6 +1,12 @@
 // The only place the frontend talks to the backend. Components call these
 // helpers (or the hooks built on them) instead of using fetch directly.
-const BASE = '/api/v1'
+// Same-origin /api/v1 by default (the session cookie and CSRF checks expect it). Set
+// VITE_API_BASE_URL only when the API is served elsewhere; it holds no secrets.
+export const BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
+const CREDENTIALS = /^https?:\/\//.test(BASE) ? 'include' : 'same-origin'
+
+/** Absolute URL of an API path, for links such as file downloads. */
+export const apiUrl = (path) => BASE + path
 
 let csrfToken = ''
 export const setCsrfToken = (token) => { csrfToken = token || '' }
@@ -29,7 +35,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
   let res
   try {
-    res = await fetch(BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin', signal })
+    res = await fetch(BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: CREDENTIALS, signal })
   } catch (err) {
     if (err.name === 'AbortError') throw err
     throw new ApiError(0, 'NETWORK', 'Cannot reach the server. Check your connection and try again.')
@@ -52,6 +58,19 @@ export const post = (path, body) => api(path, { method: 'POST', body })
 export const put = (path, body) => api(path, { method: 'PUT', body })
 export const patch = (path, body) => api(path, { method: 'PATCH', body })
 export const del = (path) => api(path, { method: 'DELETE' })
+
+/** Send a file's raw bytes (the server checks its type by content). Returns the JSON reply. */
+export async function upload(path, file, { method = 'PUT', type = file.type, name = file.name } = {}) {
+  let res
+  try {
+    res = await fetch(BASE + path, { method, body: file, credentials: CREDENTIALS, headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name), 'X-CSRF-Token': csrfToken } })
+  } catch {
+    throw new ApiError(0, 'NETWORK', 'Cannot reach the server. Check your connection and try again.')
+  }
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new ApiError(res.status, data?.error?.code || 'HTTP_' + res.status, data?.error?.message || 'The upload failed.', data?.error?.details)
+  return data
+}
 
 /** Read a one-time token from the URL and remove it so it is not kept in history or shared by accident. */
 export function takeUrlToken() {

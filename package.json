@@ -1,32 +1,14 @@
 {
-  "name": "farooquia-mms-web",
+  "name": "farooquia-mms",
   "private": true,
-  "version": "0.1.0",
-  "type": "module",
+  "description": "Convenience scripts only. Frontend/ and Backend/ each have their own dependencies and lockfile.",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "framer-motion": "^11.11.9",
-    "lenis": "^1.1.14",
-    "lucide-react": "^0.454.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.5",
-    "recharts": "^2.13.0"
-  },
-  "devDependencies": {
-    "@testing-library/dom": "^10.4.2",
-    "@testing-library/react": "^16.3.3",
-    "@vitejs/plugin-react": "^5.2.0",
-    "autoprefixer": "^10.6.2",
-    "jsdom": "^26.1.0",
-    "postcss": "^8.5.32",
-    "tailwindcss": "^3.4.14",
-    "vite": "^7.3.7",
-    "vitest": "^5.0.5"
+    "install:all": "npm --prefix Frontend install && npm --prefix Backend install",
+    "dev:web": "npm --prefix Frontend run dev",
+    "dev:api": "npm --prefix Backend run dev",
+    "dev:worker": "npm --prefix Backend run dev:worker",
+    "db:start": "npm --prefix Backend run db:start",
+    "build": "npm --prefix Frontend run build && npm --prefix Backend run build",
+    "test": "npm --prefix Frontend test && npm --prefix Backend test"
   }
 }

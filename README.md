@@ -4,7 +4,7 @@ A mobile-first web app for running a Madarsa. It serves administrators, the Prin
 
 | Part | Where | Stack |
 |---|---|---|
-| Web app | this folder (`src/`) | React 18, Vite 7, Tailwind CSS 3, React Router 7, Framer Motion, Recharts |
+| Web app | [`Frontend/`](Frontend) | React 18, Vite 7, Tailwind CSS 3, React Router 7, Framer Motion, Recharts |
 | API and background worker | [`Backend/`](Backend/README.md) | Node.js 22, Express 5, TypeScript, PostgreSQL 17 (Prisma 7), pg-boss |
 | Deployment | [`deploy/`](deploy) and [`Backend/docs/DEPLOYMENT.md`](Backend/docs/DEPLOYMENT.md) | systemd services, Caddy (HTTPS), PostgreSQL on the host |
 
@@ -17,18 +17,19 @@ cd Backend && npm run db:deploy && npm run db:seed && npm run dev
 cd Backend && npm run dev:worker                # optional: scheduled jobs
 
 # Web app
-npm install
-npm run dev                                     # http://localhost:5173
+cd Frontend && npm install && npm run dev       # http://localhost:5173
 ```
 
 Sign in with one of the development accounts listed in [Backend/README.md](Backend/README.md#development-data-npm-run-dbseed); all use the password `farooquia-dev-only`. Administrator, Principal and Mentor accounts set up an authenticator app (Google or Microsoft Authenticator) at first sign-in.
 
-`npm run build` produces `dist/`, which Caddy serves in production with `/api` proxied to the backend.
+`npm run build` in `Frontend/` produces `Frontend/dist/`, which Caddy serves in production with `/api` proxied to the backend. The root `package.json` only holds shortcuts (`npm run dev:web`, `dev:api`, `build`, `test`); each folder keeps its own dependencies.
+
+The web app needs no secrets. By default it calls the API on the same origin (`/api/v1`); see [`Frontend/.env.example`](Frontend/.env.example) for the optional `VITE_API_BASE_URL` and development proxy settings. All secrets live in `Backend/.env` (development) or `/etc/madarsa/env` (production).
 
 ## Tests
 
 ```bash
-npm test                     # web app: renders every page for every role against a fake API
+cd Frontend && npm test      # web app: renders every page for every role against a fake API
 cd Backend && npm test       # API: 152 unit, integration and security tests on a throwaway database
 ```
 

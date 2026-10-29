@@ -52,9 +52,9 @@ sudo -u postgres psql -c "CREATE DATABASE madarsa OWNER madarsa_owner ENCODING '
 # 2. Code, builds and migrations
 sudo -u madarsa git clone <repository> /srv/madarsa/app
 cd /srv/madarsa/app
-sudo -u madarsa npm ci && sudo -u madarsa npm run build        # web app, into dist/
+cd Frontend && sudo -u madarsa npm ci && sudo -u madarsa npm run build   # web app, into Frontend/dist/
 sudo cp -r dist/. /srv/madarsa/web/
-cd Backend && sudo -u madarsa npm ci && sudo -u madarsa npm run build
+cd ../Backend && sudo -u madarsa npm ci && sudo -u madarsa npm run build
 sudo -u madarsa DATABASE_URL='postgresql://madarsa_owner:<owner password>@127.0.0.1:5432/madarsa' npx prisma migrate deploy
 
 # 3. Restricted application role (once)
@@ -91,8 +91,8 @@ The command prints a one-time setup link, valid for 72 hours. The administrator 
 
 ```bash
 cd /srv/madarsa/app && sudo -u madarsa git pull
-sudo -u madarsa npm ci && sudo -u madarsa npm run build && sudo cp -r dist/. /srv/madarsa/web/
-cd Backend && sudo -u madarsa npm ci && sudo -u madarsa npm run build
+cd Frontend && sudo -u madarsa npm ci && sudo -u madarsa npm run build && sudo cp -r dist/. /srv/madarsa/web/
+cd ../Backend && sudo -u madarsa npm ci && sudo -u madarsa npm run build
 sudo -u madarsa DATABASE_URL='postgresql://madarsa_owner:<owner password>@127.0.0.1:5432/madarsa' npx prisma migrate deploy
 sudo systemctl restart madarsa-api madarsa-worker
 ```

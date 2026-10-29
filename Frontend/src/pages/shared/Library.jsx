@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { BookOpen, FileText, Headphones, NotebookPen, FileSpreadsheet, Upload, Download, Eye, Lock, Info, Library as LibIcon } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
 import { useAuth } from '../../context/AuthContext'
-import { api, post } from '../../api/client'
+import { post, upload } from '../../api/client'
 import { AUDIENCE_CODE } from '../../api/people'
 import { useToast } from '../../context/ToastContext'
 import { useQueryState } from '../../hooks/useQueryState'
@@ -167,10 +167,5 @@ function UploadModal({ open, onClose }) {
 
 /** Sends the file's raw bytes; the server checks its type by content and stores it privately. */
 async function uploadFile(id, file) {
-  const type = file.type === 'audio/x-m4a' ? 'audio/mp4' : file.type
-  const res = await fetch(`/api/v1/library/${id}/file`, {
-    method: 'PUT', body: file, credentials: 'same-origin',
-    headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(file.name), 'X-CSRF-Token': (await api('/auth/session')).csrfToken },
-  })
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || 'The upload failed.')
+  await upload(`/library/${id}/file`, file, { type: file.type === 'audio/x-m4a' ? 'audio/mp4' : file.type })
 }
