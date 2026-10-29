@@ -21,6 +21,8 @@ import { feesRouter, webhookRouter } from './modules/fees/fees.routes.js'
 import { notificationsRouter } from './modules/notifications/notifications.routes.js'
 import { campusRouter } from './modules/hostel/campus.routes.js'
 import { auditRouter } from './modules/audit-logs/audit.routes.js'
+import { paymentSettingsRouter } from './modules/payment-settings/settings.routes.js'
+import { manualPaymentsRouter } from './modules/fees/manual.routes.js'
 
 export function createApp() {
   const app = express()
@@ -70,6 +72,8 @@ export function createApp() {
   api.use(learningRouter)
   api.use(assessmentsRouter)
   api.use(feesRouter)
+  api.use(paymentSettingsRouter)
+  api.use(manualPaymentsRouter)
   api.use(notificationsRouter)
   api.use(campusRouter)
   api.use(auditRouter)

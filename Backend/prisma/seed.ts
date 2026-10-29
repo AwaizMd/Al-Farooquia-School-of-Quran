@@ -57,5 +57,9 @@ console.log(`Exams: ${await seedExams(prisma, await institutionToday())}`)
 console.log(`Fees: ${await seedFees(prisma, await institutionToday())}`)
 console.log(`Campus: ${await seedCampus(prisma, await institutionToday())}`)
 
+// Online payment through the development gateway (no money moves). Bank transfer and UPI
+// are left for an administrator to set up in Fee Payment Settings: no invented account or QR.
+await prisma.paymentSettings.upsert({ where: { institutionId: 1 }, update: {}, create: { institutionId: 1, razorpayEnabled: true } })
+
 console.log(`Seed complete. Dev accounts (password "${DEV_PASSWORD}"): ${accounts.map((a) => a.email ?? a.username).join(', ')}`)
 await prisma.$disconnect()

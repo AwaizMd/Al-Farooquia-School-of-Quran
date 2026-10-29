@@ -82,7 +82,7 @@ export async function studentFees(req: Request, ref: string) {
 
 type PaymentRow = Prisma.PaymentGetPayload<{ include: { receipt: true; allocations: { include: { invoice: { select: { number: true; period: true } } } }; refunds: { include: { allocations: true } } } }>
 export const paymentView = (p: PaymentRow) => ({
-  id: p.id, receiptNo: p.receipt.number, receivedOn: isoDate(p.receivedOn), method: p.method, source: p.source, amountMinor: p.amountMinor, unallocatedMinor: p.unallocatedMinor, currency: p.currency, note: p.note,
+  id: p.id, receiptNo: p.receipt.number, receivedOn: isoDate(p.receivedOn), method: p.method, source: p.source, reference: p.reference, amountMinor: p.amountMinor, unallocatedMinor: p.unallocatedMinor, currency: p.currency, note: p.note,
   allocations: p.allocations.map((a) => ({
     invoiceId: a.invoiceId, invoiceNumber: a.invoice.number, period: a.invoice.period, amountMinor: a.amountMinor,
     refundedMinor: p.refunds.filter((r) => r.status !== 'FAILED').flatMap((r) => r.allocations).filter((x) => x.invoiceId === a.invoiceId).reduce((t, x) => t + x.amountMinor, 0),
@@ -134,6 +134,8 @@ export interface Receive {
   invoiceIds?: string[] | undefined
   recordedById?: string | null | undefined
   paymentAttemptId?: string | undefined
+  /** UTR / bank reference or gateway payment id (unique across payments). */
+  reference?: string | undefined
   /** Online money already taken: record it even if it exceeds the current balance (excess left unallocated for review). */
   allowUnallocated?: boolean | undefined
 }
@@ -163,7 +165,7 @@ export async function receive(tx: Tx, r: Receive, today: string) {
   const payment = await tx.payment.create({
     data: {
       studentId: r.studentId, receiptId: receipt.id, amountMinor: r.amountMinor, unallocatedMinor: left, currency, method: r.method, source: r.source,
-      receivedOn: toDate(r.receivedOn), recordedById: r.recordedById ?? null, note: r.note?.trim() || null, paymentAttemptId: r.paymentAttemptId ?? null,
+      receivedOn: toDate(r.receivedOn), recordedById: r.recordedById ?? null, note: r.note?.trim() || null, paymentAttemptId: r.paymentAttemptId ?? null, reference: r.reference ?? null,
       allocations: { create: allocations },
     },
     include: { receipt: true, allocations: { include: { invoice: { select: { number: true, period: true } } } }, refunds: { include: { allocations: true } } },

@@ -4,7 +4,7 @@ import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
 import { institutionToday } from '../../common/clock.js'
 import { logger } from '../../common/logger.js'
 import { prisma } from '../../database/prisma.js'
-import { devGateway, paymentProvider } from '../../integrations/payments/index.js'
+import { availableMethods, devGateway, gateway, markWebhookVerified } from '../payment-settings/settings.service.js'
 import type { ProviderEvent } from '../../integrations/payments/provider.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { invoiceView, receive } from './fees.service.js'
@@ -22,8 +22,9 @@ const attemptView = (a: { id: string; reference: string; status: string; amountM
  * invoices; nothing the browser sends can change it.
  */
 export async function createAttempt(req: Request, input: { studentId: string; invoiceIds?: string[] | undefined }) {
-  const provider = paymentProvider()
-  if (!provider) throw new AppError(503, 'PAYMENTS_DISABLED', 'Online payment is not available yet. Please pay at the office.')
+  const methods = await availableMethods()
+  const provider = methods.online ? await gateway(methods.settings) : null
+  if (!provider) throw new AppError(503, 'PAYMENTS_DISABLED', 'Online payment is not offered by the Madarsa. Use another payment method or pay at the office.')
   const auth = req.auth!
   // Only a guardian linked to this student with permission to pay.
   const link = await prisma.studentGuardian.findFirst({ where: { studentId: input.studentId, canPay: true, guardian: { userId: auth.user.id } } })
@@ -76,13 +77,15 @@ export async function getAttempt(req: Request, id: string) {
  * once (unique event id), and money is matched against the attempt amount.
  */
 export async function handleWebhook(providerName: string, rawBody: Buffer, headers: Record<string, string | string[] | undefined>) {
-  const provider = paymentProvider()
+  // Webhooks are honoured even if online payment was switched off later: money may already be taken.
+  const provider = await gateway()
   if (!provider || provider.name !== providerName) throw notFound()
   const event = provider.verifyWebhook(rawBody, headers)
   if (!event) {
     logger.warn({ provider: providerName }, 'Rejected payment webhook with an invalid signature')
     throw new AppError(400, 'INVALID_SIGNATURE', 'Signature verification failed.')
   }
+  if (provider.name === 'razorpay') await markWebhookVerified()
   try {
     await prisma.webhookEvent.create({ data: { provider: providerName, eventId: event.eventId, type: event.type, signatureValid: true, payload: JSON.parse(JSON.stringify(event.stored)) } })
   } catch (err) {
@@ -117,7 +120,7 @@ async function processEvent(event: ProviderEvent): Promise<string> {
       return 'amount_mismatch'
     }
     // Money was taken: record it even if the balance changed meanwhile (excess is left for review).
-    const payment = await receive(tx, { studentId: attempt.studentId, amountMinor: attempt.amountMinor, method: 'ONLINE', source: 'ONLINE', receivedOn: today, invoiceIds: attempt.invoiceIds, paymentAttemptId: attempt.id, allowUnallocated: true, recordedById: null }, today)
+    const payment = await receive(tx, { studentId: attempt.studentId, amountMinor: attempt.amountMinor, method: 'ONLINE', source: 'ONLINE', receivedOn: today, invoiceIds: attempt.invoiceIds, paymentAttemptId: attempt.id, allowUnallocated: true, recordedById: null, reference: event.providerPaymentId }, today)
     await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { status: 'SUCCEEDED', providerPaymentId: event.providerPaymentId ?? null } })
     await notifyStudentFamily(tx, attempt.studentId, { category: 'FEES', title: 'Online payment confirmed', body: `Receipt ${payment.receipt.number} · ${(payment.amountMinor / 100).toFixed(2)} ${payment.currency}`, link: '/fees' }, { fees: true })
     await audit({ action: 'fees.online_payment_confirmed', summary: `Receipt ${payment.receipt.number} · ${(payment.amountMinor / 100).toFixed(2)} ${payment.currency} confirmed by the gateway${payment.unallocatedMinor ? ` (${(payment.unallocatedMinor / 100).toFixed(2)} unallocated — review)` : ''}`, entityType: 'student', entityId: attempt.studentId, actor: SYSTEM, metadata: { attemptId: attempt.id, paymentId: payment.id } }, undefined, tx)
@@ -136,5 +139,33 @@ export async function devComplete(req: Request, attemptId: string, outcome: 'suc
     orderId: a.providerOrderId, paymentId: `dev_pay_${randomBytes(6).toString('hex')}`, amountMinor: a.amountMinor, currency: a.currency,
   })
   await handleWebhook('dev', raw, headers)
+  return getAttempt(req, attemptId)
+}
+
+/**
+ * Razorpay checkout callback. The browser only hands over ids and a signature:
+ * the signature is checked, then the payment is fetched from Razorpay itself, and
+ * only a captured payment for this order (with the right amount, checked in
+ * processEvent) is credited. Anything else waits for the signed webhook.
+ */
+export async function verifyCheckout(req: Request, attemptId: string, input: { orderId: string; paymentId: string; signature: string }) {
+  const a = await prisma.paymentAttempt.findUnique({ where: { id: attemptId } })
+  if (!a || a.payerUserId !== req.auth!.user.id || !a.providerOrderId) throw notFound()
+  const provider = await gateway()
+  if (!provider || provider.name !== a.provider || !provider.verifyCheckout || !provider.fetchPayment) throw conflict('VERIFY_UNAVAILABLE', 'This payment is confirmed by the gateway’s notification.')
+  if (input.orderId !== a.providerOrderId || !provider.verifyCheckout(a.providerOrderId, input.paymentId, input.signature)) {
+    await audit({ action: 'fees.checkout_signature_invalid', summary: `Checkout for ${a.reference} returned an invalid signature`, entityType: 'student', entityId: a.studentId, metadata: { attemptId } }, req)
+    throw new AppError(400, 'INVALID_SIGNATURE', 'The payment could not be verified.')
+  }
+  let p
+  try {
+    p = await provider.fetchPayment(input.paymentId)
+  } catch (err) {
+    logger.warn({ err, attempt: a.id }, 'Could not fetch the payment from the gateway')
+    return { ...(await getAttempt(req, attemptId)), note: 'The gateway could not be reached; the payment will be confirmed when its notification arrives.' }
+  }
+  if (p.orderId !== a.providerOrderId) throw new AppError(400, 'INVALID_SIGNATURE', 'The payment could not be verified.')
+  const type = p.status === 'captured' ? 'payment.succeeded' : p.status === 'failed' ? 'payment.failed' : null
+  if (type) await processEvent({ eventId: `checkout:${p.id}`, type, providerOrderId: p.orderId, providerPaymentId: p.id, amountMinor: p.amountMinor, currency: p.currency, stored: {} })
   return getAttempt(req, attemptId)
 }

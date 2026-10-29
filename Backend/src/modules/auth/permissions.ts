@@ -30,6 +30,10 @@ export const PERMISSIONS = [
   'fees.invoice',
   'fees.adjust',
   'fees.refund',
+  // Approve or reject bank transfer / UPI payments reported by families.
+  'fees.verify',
+  // Choose payment methods and enter gateway credentials, bank details and the UPI QR.
+  'payments.configure',
   'hostel.read',
   'hostel.manage',
   // Add library resources (and edit one's own).
@@ -40,7 +44,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
-  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund', 'hostel.read', 'hostel.manage', 'library.upload', 'library.manage'],
+  ADMIN: ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'library.upload', 'library.manage'],
   // Approved: the Principal sees institution-wide information but not security administration.
   PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read'],
   MENTOR: ['library.upload'],
@@ -55,3 +59,6 @@ export function permissionsFor(roles: readonly Role[]) {
 
 /** Roles whose sessions use the shorter staff timeouts. */
 export const STAFF_ROLES: readonly Role[] = ['ADMIN', 'PRINCIPAL', 'MENTOR', 'WARDEN']
+
+/** Roles that hold a permission (for example, to notify everyone who can verify payments). */
+export const rolesWith = (p: Permission) => (Object.keys(GRANTS) as Role[]).filter((r) => GRANTS[r].includes(p))

@@ -4,7 +4,7 @@ import { AdjustmentKind } from '../../generated/prisma/enums.js'
 import { doc } from '../../docs/route.js'
 import { requireAuth, requirePermission, requireRecentAuth } from '../../middleware/auth.js'
 import { body, IsoDate } from '../../middleware/validate.js'
-import { paymentProvider } from '../../integrations/payments/index.js'
+import { availableMethods, gateway } from '../payment-settings/settings.service.js'
 import * as fees from './fees.service.js'
 import * as payments from './payments.service.js'
 
@@ -53,13 +53,14 @@ feesRouter.post('/fees/invoices/:id/void', requirePermission('fees.adjust'), req
 
 doc('post', '/fees/payments/:id/refunds', T, 'Refund part or all of a payment', { body: Refund, auth: 'fees.refund + recent re-authentication' })
 feesRouter.post('/fees/payments/:id/refunds', requirePermission('fees.refund'), requireRecentAuth(), async (req, res) => {
-  const p = paymentProvider()
+  const p = await gateway()
   res.json(await fees.refundPayment(req, Id.parse(req.params.id), body(req, Refund), p ? (id, amt) => p.refund(id, amt) : undefined))
 })
 
 doc('get', '/payments/config', T, 'Whether online payment is available')
-feesRouter.get('/payments/config', requireAuth, (_req, res) => {
-  res.json({ provider: paymentProvider()?.name ?? null })
+feesRouter.get('/payments/config', requireAuth, async (_req, res) => {
+  const m = await availableMethods()
+  res.json({ provider: m.online ? (await gateway(m.settings))?.name ?? null : null })
 })
 
 doc('post', '/payments/attempts', T, 'Start an online payment (amount set by the server)', { body: Attempt })
@@ -70,6 +71,12 @@ feesRouter.post('/payments/attempts', requireAuth, async (req, res) => {
 doc('get', '/payments/attempts/:id', T, 'Status of an online payment')
 feesRouter.get('/payments/attempts/:id', requireAuth, async (req, res) => {
   res.json(await payments.getAttempt(req, Id.parse(req.params.id)))
+})
+
+const Verify = z.object({ orderId: z.string().min(1).max(64), paymentId: z.string().min(1).max(64), signature: z.string().regex(/^[0-9a-f]{64}$/) })
+doc('post', '/payments/attempts/:id/verify', T, 'Verify a Razorpay checkout (signature + server-side payment fetch)', { body: Verify })
+feesRouter.post('/payments/attempts/:id/verify', requireAuth, async (req, res) => {
+  res.json(await payments.verifyCheckout(req, Id.parse(req.params.id), body(req, Verify)))
 })
 
 doc('post', '/payments/dev/attempts/:id/complete', T, 'Development gateway: simulate the customer finishing checkout')

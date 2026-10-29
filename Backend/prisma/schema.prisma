@@ -18,22 +18,23 @@ datasource db {
 
 /// Single-institution deployment: exactly one row, id = 1.
 model InstitutionSettings {
-  id          Int      @id @default(1)
-  brandName   String
-  shortName   String
-  brandArabic String
-  tagline     String
-  address     String
-  phone       String
-  email       String
+  id              Int              @id @default(1)
+  brandName       String
+  shortName       String
+  brandArabic     String
+  tagline         String
+  address         String
+  phone           String
+  email           String
   /// ISO 4217 code. Money is stored in minor units of this currency.
-  currency    String   @db.Char(3)
+  currency        String           @db.Char(3)
   /// IANA timezone used to decide "today", due dates and job schedules.
-  timezone    String
+  timezone        String
   /// 0 = Sunday … 6 = Saturday
-  weeklyOff   Int      @db.SmallInt
-  feeDueDay   Int      @db.SmallInt
-  updatedAt   DateTime @updatedAt
+  weeklyOff       Int              @db.SmallInt
+  feeDueDay       Int              @db.SmallInt
+  updatedAt       DateTime         @updatedAt
+  paymentSettings PaymentSettings?
 
   @@map("institution_settings")
 }
@@ -365,27 +366,27 @@ enum StudentStatus {
 }
 
 model Student {
-  id              String             @id @default(uuid()) @db.Uuid
+  id              String                    @id @default(uuid()) @db.Uuid
   /// Institution-assigned, unique, never reused. Also the student's sign-in name.
-  admissionNo     String             @unique
-  userId          String?            @unique @db.Uuid
+  admissionNo     String                    @unique
+  userId          String?                   @unique @db.Uuid
   name            String
   gender          Gender
-  dob             DateTime           @db.Date
-  admissionDate   DateTime           @db.Date
-  status          StudentStatus      @default(ACTIVE)
-  groupId         String             @db.Uuid
+  dob             DateTime                  @db.Date
+  admissionDate   DateTime                  @db.Date
+  status          StudentStatus             @default(ACTIVE)
+  groupId         String                    @db.Uuid
   phone           String
   address         String?
-  hostelResident  Boolean            @default(false)
+  hostelResident  Boolean                   @default(false)
   bloodGroup      String?
   medicalNotes    String?
-  feePlanId       String?            @db.Uuid
-  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
-  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  group           Group              @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  feePlan         FeePlan?           @relation(fields: [feePlanId], references: [id], onDelete: Restrict)
+  feePlanId       String?                   @db.Uuid
+  createdAt       DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                  @updatedAt @db.Timestamptz(3)
+  user            User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  group           Group                     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  feePlan         FeePlan?                  @relation(fields: [feePlanId], references: [id], onDelete: Restrict)
   guardians       StudentGuardian[]
   enrollments     GroupEnrollment[]
   concessions     Concession[]
@@ -395,6 +396,7 @@ model Student {
   invoices        Invoice[]
   payments        Payment[]
   paymentAttempts PaymentAttempt[]
+  manualPayments  ManualPaymentSubmission[]
   bedAssignments  BedAssignment[]
   hostelRoll      HostelRollEntry[]
 
@@ -760,29 +762,34 @@ enum PaymentMethod {
 enum PaymentSource {
   MANUAL
   ONLINE
+  /// A bank transfer or UPI payment the payer reported and staff verified.
+  VERIFIED
 }
 
 /// Money received. Confirmed payments are never edited; refunds reverse them.
 model Payment {
-  id               String              @id @default(uuid()) @db.Uuid
-  studentId        String              @db.Uuid
-  receiptId        String              @unique @db.Uuid
+  id               String                   @id @default(uuid()) @db.Uuid
+  studentId        String                   @db.Uuid
+  receiptId        String                   @unique @db.Uuid
   amountMinor      Int
   /// Received but not matched to an open invoice (needs review).
-  unallocatedMinor Int                 @default(0)
-  currency         String              @db.Char(3)
+  unallocatedMinor Int                      @default(0)
+  currency         String                   @db.Char(3)
   method           PaymentMethod
   source           PaymentSource
-  receivedOn       DateTime            @db.Date
-  recordedById     String?             @db.Uuid
+  receivedOn       DateTime                 @db.Date
+  recordedById     String?                  @db.Uuid
   note             String?
-  paymentAttemptId String?             @unique @db.Uuid
-  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
-  student          Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  receipt          Receipt             @relation(fields: [receiptId], references: [id], onDelete: Restrict)
-  attempt          PaymentAttempt?     @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+  paymentAttemptId String?                  @unique @db.Uuid
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
+  student          Student                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  receipt          Receipt                  @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  attempt          PaymentAttempt?          @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
   allocations      PaymentAllocation[]
   refunds          Refund[]
+  /// UTR / bank reference or gateway payment id, shown on the receipt.
+  reference        String?
+  manualSubmission ManualPaymentSubmission?
 
   @@index([studentId])
   @@index([receivedOn])
@@ -1042,15 +1049,19 @@ model LibraryResource {
 
 /// File metadata. The bytes live in private storage under `storageKey` (never the uploaded name).
 model StoredFile {
-  id           String           @id @default(uuid()) @db.Uuid
-  storageKey   String           @unique
+  id           String                   @id @default(uuid()) @db.Uuid
+  storageKey   String                   @unique
   originalName String
   mimeType     String
   sizeBytes    Int
   sha256       String
-  uploadedById String?          @db.Uuid
-  createdAt    DateTime         @default(now()) @db.Timestamptz(3)
+  uploadedById String?                  @db.Uuid
+  createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
   resource     LibraryResource?
+  /// What the file is for, so a library file can never be passed off as payment proof.
+  purpose      FilePurpose              @default(LIBRARY)
+  upiQrFor     PaymentSettings?
+  proofFor     ManualPaymentSubmission?
 
   @@map("stored_files")
 }
@@ -1244,4 +1255,103 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorUserId, at(sort: Desc)])
   @@map("audit_logs")
+}
+
+// ---------- Configurable payment methods ----------
+
+enum FilePurpose {
+  LIBRARY
+  PAYMENT_PROOF
+  UPI_QR
+}
+
+enum RazorpayMode {
+  TEST
+  LIVE
+}
+
+/// How the institution accepts fees: Razorpay, bank transfer and/or UPI QR.
+/// Razorpay secrets are AES-256-GCM sealed (SETTINGS_ENCRYPTION_KEYS); never returned by the API.
+model PaymentSettings {
+  institutionId                Int                 @id @default(1)
+  razorpayEnabled              Boolean             @default(false)
+  razorpayMode                 RazorpayMode        @default(TEST)
+  razorpayKeyId                String?
+  razorpaySecret               Bytes?
+  razorpayWebhookSecret        Bytes?
+  /// When the current keys were last checked against Razorpay's API.
+  razorpayValidatedAt          DateTime?           @db.Timestamptz(3)
+  /// Key id for which a correctly signed webhook last arrived (live readiness needs one).
+  razorpayWebhookVerifiedKeyId String?
+  razorpayWebhookVerifiedAt    DateTime?           @db.Timestamptz(3)
+  bankEnabled                  Boolean             @default(false)
+  bankAccountName              String?
+  bankName                     String?
+  bankAccountNumber            String?
+  bankIfsc                     String?
+  bankBranch                   String?
+  bankAccountType              String?
+  bankInstructions             String?
+  bankReferenceHint            String?
+  bankProofRequired            Boolean             @default(false)
+  upiEnabled                   Boolean             @default(false)
+  upiQrFileId                  String?             @unique @db.Uuid
+  upiId                        String?
+  upiPayeeName                 String?
+  upiInstructions              String?
+  upiProofRequired             Boolean             @default(false)
+  updatedById                  String?             @db.Uuid
+  updatedAt                    DateTime            @updatedAt @db.Timestamptz(3)
+  institution                  InstitutionSettings @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  upiQr                        StoredFile?         @relation(fields: [upiQrFileId], references: [id], onDelete: Restrict)
+
+  @@map("payment_settings")
+}
+
+enum ManualPaymentMethod {
+  BANK_TRANSFER
+  UPI
+}
+
+enum ManualPaymentStatus {
+  PENDING_VERIFICATION
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+}
+
+/// A payer's claim that they paid by bank transfer or UPI. It changes no balance
+/// until authorised staff approve it, which records a Payment in the one ledger.
+model ManualPaymentSubmission {
+  id                  String              @id @default(uuid()) @db.Uuid
+  studentId           String              @db.Uuid
+  submittedById       String              @db.Uuid
+  method              ManualPaymentMethod
+  /// Invoices the payer says this covers (empty = oldest due first).
+  invoiceIds          String[]            @db.Uuid
+  amountMinor         Int
+  currency            String              @db.Char(3)
+  paidOn              DateTime            @db.Date
+  /// UTR / transaction reference as typed, and normalised (A–Z, 0–9) for duplicate checks.
+  reference           String
+  referenceKey        String
+  note                String?
+  proofFileId         String?             @unique @db.Uuid
+  status              ManualPaymentStatus @default(PENDING_VERIFICATION)
+  reviewedById        String?             @db.Uuid
+  reviewedAt          DateTime?           @db.Timestamptz(3)
+  /// Rejection reason or the information requested.
+  reviewNote          String?
+  approvedAmountMinor Int?
+  paymentId           String?             @unique @db.Uuid
+  createdAt           DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(3)
+  student             Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  proof               StoredFile?         @relation(fields: [proofFileId], references: [id], onDelete: Restrict)
+  payment             Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([studentId])
+  @@index([referenceKey])
+  @@map("manual_payment_submissions")
 }

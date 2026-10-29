@@ -27,12 +27,27 @@ export interface ProviderEvent {
   stored: Record<string, unknown>
 }
 
+/** A payment as the gateway itself reports it (fetched server-to-server). */
+export interface GatewayPayment {
+  id: string
+  orderId?: string | undefined
+  status: string
+  amountMinor: number
+  currency: string
+}
+
 export interface PaymentProvider {
   readonly name: string
   createOrder(input: CreateOrder): Promise<Order>
   /** Verify the signature over the exact raw body. Returns null when it does not verify. */
   verifyWebhook(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): ProviderEvent | null
   refund(providerPaymentId: string, amountMinor: number): Promise<{ status: 'COMPLETED' | 'PENDING' | 'FAILED'; providerRef?: string | undefined }>
+  /** Check the signature the checkout hands back to the browser (proves the ids came from the gateway, not that money was captured). */
+  verifyCheckout?(orderId: string, paymentId: string, signature: string): boolean
+  /** Ask the gateway for a payment's real status. */
+  fetchPayment?(providerPaymentId: string): Promise<GatewayPayment>
+  /** Throws if the gateway rejects the credentials. */
+  validate?(): Promise<void>
 }
 
 export const header = (h: Record<string, string | string[] | undefined>, name: string) => {

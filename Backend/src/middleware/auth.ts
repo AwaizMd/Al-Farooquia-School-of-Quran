@@ -6,9 +6,15 @@ import { AppError, forbidden, unauthenticated } from '../common/errors.js'
 import { permissionsFor, type Permission } from '../modules/auth/permissions.js'
 import { SESSION_COOKIE, findActiveSession } from '../modules/auth/session.service.js'
 import { UPLOAD_TYPES } from '../modules/library/library.service.js'
+import { PROOF_UPLOAD_TYPES } from '../modules/fees/manual.service.js'
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-const RAW_UPLOAD_PATH = /^\/library\/[0-9a-f-]{36}\/file$/i
+// The only routes that take a raw (non-JSON) body: file uploads, which still need the CSRF token.
+const RAW_UPLOADS: { method: string; path: RegExp; types: string[] }[] = [
+  { method: 'PUT', path: /^\/library\/[0-9a-f-]{36}\/file$/i, types: UPLOAD_TYPES },
+  { method: 'POST', path: /^\/payments\/proofs$/, types: PROOF_UPLOAD_TYPES },
+  { method: 'PUT', path: /^\/admin\/payment-settings\/upi-qr$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
+]
 
 /** Attach req.auth when a valid session cookie is present. Never rejects on its own. */
 export const loadSession: RequestHandler = async (req, _res, next) => {
@@ -39,7 +45,7 @@ export const csrfProtection: RequestHandler = (req, _res, next) => {
   if (origin && !env.CORS_ORIGINS.includes(origin)) return next(forbidden('Cross-site request blocked.'))
   const hasBody = Number(req.get('content-length') ?? 0) > 0 || req.get('transfer-encoding') !== undefined
   // The one exception: raw library uploads (still need the CSRF token below, which forms cannot send).
-  const rawUpload = req.method === 'PUT' && RAW_UPLOAD_PATH.test(req.path) && req.is(UPLOAD_TYPES)
+  const rawUpload = RAW_UPLOADS.some((u) => u.method === req.method && u.path.test(req.path) && req.is(u.types))
   if (hasBody && !req.is('application/json') && !rawUpload) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Requests must be sent as JSON.'))
   if (req.auth) {
     const sent = req.get('x-csrf-token')

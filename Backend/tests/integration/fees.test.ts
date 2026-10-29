@@ -9,6 +9,7 @@ import { razorpayProvider } from '../../src/integrations/payments/razorpay.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, app, client, type Client } from '../helpers/auth.js'
 import { seedPeopleFixture } from '../helpers/people.js'
+import { enablePayments } from '../helpers/payments.js'
 
 let fx: Awaited<ReturnType<typeof seedPeopleFixture>>
 let admin: Client
@@ -168,7 +169,10 @@ describe('who can see and record fees', () => {
 })
 
 describe('online payments', () => {
-  beforeEach(async () => { await admin.post('/api/v1/fees/invoices/issue', { period }) })
+  beforeEach(async () => {
+    await enablePayments({ online: true })
+    await admin.post('/api/v1/fees/invoices/issue', { period })
+  })
 
   it('the server sets the amount; the client cannot', async () => {
     const p = await as('p1@x.test')
