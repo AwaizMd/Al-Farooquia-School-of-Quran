@@ -38,6 +38,7 @@ The seed loads fictional data, never real data, and refuses to run in production
 - **Activity:** 30 school days of attendance and lessons, plus exams and results.
 - **Fees:** four months of invoices and payments.
 - **Campus:** hostel rooms and residents, and the library with two sample PDFs.
+- **Payments:** online (development gateway), bank transfer and UPI QR all switched on with clearly fake demo details (the QR encodes text, not a payment address), and a few reported bank/UPI payments waiting for verification, needing information or rejected.
 
 It also creates one sign-in per role. The password for all of them is `farooquia-dev-only`.
 
@@ -46,9 +47,12 @@ It also creates one sign-in per role. The password for all of them is `farooquia
 | Administrator | admin@farooquia.demo | mandatory: set up at first sign-in |
 | Principal | principal@farooquia.demo | mandatory |
 | Mentor (Hifz Halqa A) | mentor@farooquia.demo | mandatory |
+| Mentor (Hifz Halqa B) | mentor2@farooquia.demo | mandatory |
 | Warden | warden@farooquia.demo | optional |
 | Parent (Abdullah and Maryam) | parent@farooquia.demo | optional |
+| Parent (Usman, Ayaan and Zainab Qureshi) | parent2@farooquia.demo | optional |
 | Student (Abdullah Khan) | S-1001 (admission number) | optional |
+| Student (Usman Qureshi) | S-1003 (admission number) | optional |
 
 ## Scripts
 

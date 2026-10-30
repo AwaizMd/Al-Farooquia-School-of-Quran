@@ -3,6 +3,7 @@ import { prisma } from '../src/database/prisma.js'
 import type { Role } from '../src/generated/prisma/enums.js'
 import { hashPassword } from '../src/modules/auth/password.js'
 import { linkDevAccounts, seedActivity, seedCampus, seedExams, seedFees, seedPeople } from './seed-people.js'
+import { seedPayments } from './seed-payments.js'
 import { institutionToday } from '../src/common/clock.js'
 
 if (process.env.NODE_ENV === 'production') {
@@ -36,9 +37,12 @@ const accounts: { email?: string; username?: string; displayName: string; role: 
   { email: 'admin@farooquia.demo', displayName: 'Maulana Shoaib Akhtar', role: 'ADMIN' },
   { email: 'principal@farooquia.demo', displayName: 'Mufti Abdul Qadir', role: 'PRINCIPAL' },
   { email: 'mentor@farooquia.demo', displayName: 'Qari Abdul Rahman Siddiqui', role: 'MENTOR' },
+  { email: 'mentor2@farooquia.demo', displayName: 'Hafiz Muhammad Imran Ansari', role: 'MENTOR' },
   { email: 'warden@farooquia.demo', displayName: 'Hafiz Naseeruddin', role: 'WARDEN' },
   { email: 'parent@farooquia.demo', displayName: 'Javed Khan', role: 'PARENT' },
+  { email: 'parent2@farooquia.demo', displayName: 'Farhan Qureshi', role: 'PARENT' },
   { username: 's-1001', displayName: 'Abdullah Khan', role: 'STUDENT' },
+  { username: 's-1003', displayName: 'Usman Qureshi', role: 'STUDENT' },
 ]
 const passwordHash = await hashPassword(DEV_PASSWORD)
 for (const a of accounts) {
@@ -57,9 +61,8 @@ console.log(`Exams: ${await seedExams(prisma, await institutionToday())}`)
 console.log(`Fees: ${await seedFees(prisma, await institutionToday())}`)
 console.log(`Campus: ${await seedCampus(prisma, await institutionToday())}`)
 
-// Online payment through the development gateway (no money moves). Bank transfer and UPI
-// are left for an administrator to set up in Fee Payment Settings: no invented account or QR.
-await prisma.paymentSettings.upsert({ where: { institutionId: 1 }, update: {}, create: { institutionId: 1, razorpayEnabled: true } })
+// All three payment methods with clearly fake demo details, and a few reported payments.
+console.log(`Payments: ${await seedPayments(prisma, await institutionToday())}`)
 
 console.log(`Seed complete. Dev accounts (password "${DEV_PASSWORD}"): ${accounts.map((a) => a.email ?? a.username).join(', ')}`)
 await prisma.$disconnect()

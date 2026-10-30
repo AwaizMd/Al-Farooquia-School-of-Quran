@@ -214,4 +214,7 @@ export async function linkDevAccounts(prisma: PrismaClient) {
   await link('warden@farooquia.demo', null, 'staff', 'st-warden')
   await link('parent@farooquia.demo', null, 'guardian', 'p1')
   await link(null, 's-1001', 'student', 'S-1001')
+  await link('mentor2@farooquia.demo', null, 'staff', 'm2')
+  await link('parent2@farooquia.demo', null, 'guardian', 'p4')
+  await link(null, 's-1003', 'student', 'S-1003')
 }
