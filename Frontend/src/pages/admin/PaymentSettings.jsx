@@ -123,6 +123,7 @@ export default function PaymentSettings() {
 
       <Card>
         <CardHeader title={t('Payment methods offered')} subtitle={t('Only methods that are switched on and fully set up are shown to families')} icon={ShieldCheck} />
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5">
         <div role="radiogroup" aria-label={t('Payment methods offered')} className="mt-3 grid gap-2 md:grid-cols-3">
           {MODES.map((m) => (
             <button key={m.value} type="button" role="radio" aria-checked={draft.mode === m.value} onClick={() => setDraft((d) => ({ ...d, mode: m.value, ...(m.value !== 'online' && !d.bankOn && !d.upiOn ? { bankOn: true } : {}) }))}
@@ -139,10 +140,12 @@ export default function PaymentSettings() {
           </div>
         )}
         {err('mode') && <p className="mt-2 text-[12.5px] text-clay-600" role="alert">{err('mode')}</p>}
+        </div>
       </Card>
 
       <Card>
         <CardHeader title={t('Razorpay')} subtitle={t('Online payments confirmed by the gateway')} icon={CreditCard} />
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5">
         {rzp.source === 'development' && <Notice tone="gold" className="mt-3">{t('Development gateway: no keys needed and no real money moves. Production uses Razorpay.')}</Notice>}
         {rzp.source === 'environment' && <Notice tone="blue" className="mt-3">{t('The Razorpay keys are managed in the server’s environment settings and cannot be changed here.')}</Notice>}
         {rzp.source === 'settings' && (
@@ -169,11 +172,13 @@ export default function PaymentSettings() {
         </div>
         <Ready ready={rzp.ready} problems={rzp.problems} enabled={rzp.enabled} />
         {err('razorpay.enabled') && <p className="mt-2 text-[12.5px] text-clay-600" role="alert">{err('razorpay.enabled')}</p>}
+        </div>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={t('Bank transfer')} subtitle={t('Shown only to guardians paying a fee')} icon={Landmark} />
+          <div className="px-4 pb-4 sm:px-5 sm:pb-5">
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Input label={t('Account holder name')} value={draft.bank.accountName ?? ''} onChange={(e) => setBank('accountName', e.target.value)} />
             <Input label={t('Bank name')} value={draft.bank.bankName ?? ''} onChange={(e) => setBank('bankName', e.target.value)} />
@@ -190,10 +195,12 @@ export default function PaymentSettings() {
           <Ready ready={s.bank.ready} problems={s.bank.problems} enabled={s.bank.enabled} />
           {err('bank.enabled') && <p className="mt-2 text-[12.5px] text-clay-600" role="alert">{err('bank.enabled')}</p>}
           {s.bank.ready && <div className="mt-3"><p className="label">{t('Preview (as families see it)')}</p><BankDetails bank={s.bank} /></div>}
+          </div>
         </Card>
 
         <Card>
           <CardHeader title={t('UPI QR')} subtitle={t('Upload the Madarsa’s own QR code from its bank or UPI app')} icon={QrCode} />
+          <div className="px-4 pb-4 sm:px-5 sm:pb-5">
           <div className="mt-3 flex flex-col items-center gap-3 sm:flex-row sm:items-start">
             <div className="flex aspect-square w-44 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-line bg-ivory-50">
               {qr ? <img src={qr} alt={t('Current UPI QR code')} className="h-full w-full object-contain" /> : <span className="px-3 text-center text-[12.5px] text-ink-muted">{t('No QR code uploaded')}</span>}
@@ -217,6 +224,7 @@ export default function PaymentSettings() {
           </div>
           <Ready ready={s.upi.ready} problems={s.upi.problems} enabled={s.upi.enabled} />
           {err('upi.enabled') && <p className="mt-2 text-[12.5px] text-clay-600" role="alert">{err('upi.enabled')}</p>}
+          </div>
         </Card>
       </div>
 
