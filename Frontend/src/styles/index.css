@@ -66,6 +66,8 @@
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { scrollbar-width: none; }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+/* Bottom padding of 12px, or the phone's safe area if that is larger (footers, sheets). */
+.pb-safe-3 { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
 
 /* Recharts tidy-up */
 .recharts-cartesian-axis-tick-value { font-size: 11px; fill: #6B726C; }

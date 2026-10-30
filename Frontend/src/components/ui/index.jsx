@@ -300,7 +300,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
               <IconButton icon={X} label="Close" onClick={onClose} className="-me-2 -mt-1" />
             </div>
             <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4" data-lenis-prevent>{children}</div>
-            {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line bg-ivory-50 px-5 py-3 pb-safe">{footer}</div>}
+            {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line bg-ivory-50 px-5 pt-3 pb-safe-3">{footer}</div>}
           </motion.div>
         </div>
       )}

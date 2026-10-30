@@ -130,7 +130,7 @@ export default function Reports() {
             <table className="w-full min-w-[560px] text-start text-[13px]">
               <thead className="bg-sage-50 text-[11.5px] uppercase tracking-wide text-ink-muted"><tr>{cols.map((c) => <th key={c} className="whitespace-nowrap px-3 py-2.5 font-semibold">{c}</th>)}</tr></thead>
               <tbody className="divide-y divide-line">
-                {report.rows.map((r, i) => <tr key={i} className="hover:bg-ivory-50">{cols.map((c) => <td key={c} className="px-3 py-2 tabular">{typeof r[c] === 'number' && /Amount|Outstanding|Overdue/.test(c) ? money(r[c], cur) : r[c]}</td>)}</tr>)}
+                {report.rows.map((r, i) => <tr key={i} className="hover:bg-ivory-50">{cols.map((c) => <td key={c} className="whitespace-nowrap px-3 py-2 tabular">{typeof r[c] === 'number' && /Amount|Outstanding|Overdue/.test(c) ? money(r[c], cur) : r[c]}</td>)}</tr>)}
               </tbody>
             </table>
           </div>

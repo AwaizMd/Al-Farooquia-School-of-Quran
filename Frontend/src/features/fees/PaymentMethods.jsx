@@ -17,10 +17,10 @@ export function MethodCards({ options, value, onChange }) {
     options?.upi && { value: 'upi', icon: QrCode, title: 'Pay Using UPI QR', text: 'Scan the Madarsa’s QR code with any UPI app, then send us the reference.' },
   ].filter(Boolean)
   return (
-    <div role="radiogroup" aria-label={t('Payment method')} className="grid gap-2 sm:grid-cols-3">
+    <div role="radiogroup" aria-label={t('Payment method')} className="grid gap-2">
       {cards.map((c) => (
         <button key={c.value} type="button" role="radio" aria-checked={value === c.value} onClick={() => onChange(c.value)}
-          className={cx('flex min-h-[44px] items-start gap-3 rounded-xl border px-3.5 py-3 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500', value === c.value ? 'border-primary-500 bg-primary-50/60' : 'border-line hover:border-primary-200')}>
+          className={cx('flex min-h-[44px] w-full items-start gap-3 rounded-xl border px-4 py-3 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500', value === c.value ? 'border-primary-500 bg-primary-50/60' : 'border-line hover:border-primary-200')}>
           <c.icon size={20} className="mt-0.5 shrink-0 text-primary-700" aria-hidden />
           <span>
             <span className="block text-[14px] font-bold text-forest">{t(c.title)}</span>

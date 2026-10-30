@@ -42,15 +42,13 @@ export default function PaymentVerification() {
       {!canVerify && <Notice tone="blue" className="mb-4">{t('You can view reported payments. Approving or rejecting them is done by the administration.')}</Notice>}
       <Tabs tabs={STATUS_TABS.map((s) => ({ value: s.value, label: t(s.label) }))} value={status} onChange={setStatus} className="mb-3" />
       <Card className="mb-4 p-3">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-          <SearchInput value={filters.search} onChange={(v) => setF('search', v)} placeholder={t('Student name or admission no.')} className="lg:col-span-2" />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <SearchInput value={filters.search} onChange={(v) => setF('search', v)} placeholder={t('Student name or admission no.')} className="sm:col-span-2" />
           <Input aria-label={t('UTR / reference')} placeholder={t('UTR / reference')} value={filters.reference} onChange={(e) => setF('reference', e.target.value)} />
           <Select aria-label={t('Method')} value={filters.method} onChange={(e) => setF('method', e.target.value)} placeholder={t('All methods')} options={[{ value: 'BANK_TRANSFER', label: t('Bank transfer') }, { value: 'UPI', label: 'UPI' }]} />
-          <Select aria-label={t('Halqa')} value={filters.groupId} onChange={(e) => setF('groupId', e.target.value)} placeholder={t('All halqas')} options={state.groups.map((g) => ({ value: g.uuid, label: g.name }))} />
-          <div className="flex gap-2">
-            <Input aria-label={t('Submitted from')} type="date" value={filters.from} onChange={(e) => setF('from', e.target.value)} />
-            <Input aria-label={t('Submitted to')} type="date" value={filters.to} onChange={(e) => setF('to', e.target.value)} />
-          </div>
+          <Select aria-label={t('Halqa')} value={filters.groupId} onChange={(e) => setF('groupId', e.target.value)} placeholder={t('All halqas')} options={state.groups.map((g) => ({ value: g.uuid, label: g.name }))} className="sm:col-span-2" />
+          <Input aria-label={t('Submitted from')} type="date" value={filters.from} onChange={(e) => setF('from', e.target.value)} />
+          <Input aria-label={t('Submitted to')} type="date" value={filters.to} onChange={(e) => setF('to', e.target.value)} />
         </div>
       </Card>
       {error && <Notice tone="red" className="mb-4">{error}</Notice>}

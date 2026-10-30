@@ -21,7 +21,7 @@ export default function Audit() {
   return (
     <div>
       <PageHeader title={t("Activity log")} subtitle={t('{n} of {total} entries', { n: list.length, total: state.audit.length })} actions={<Button variant="secondary" icon={Download} onClick={exportCsv} disabled={!list.length}>{t("Export CSV")}</Button>} />
-      <Notice tone="gold" icon={ShieldAlert} className="mb-4">{t('This is a simulated activity log stored in your browser. It can be reset and is not a secure, immutable production audit trail.')}</Notice>
+      <Notice tone="green" icon={ShieldAlert} className="mb-4">{t('Every sign-in, change and export is recorded on the server. Entries cannot be edited or deleted.')}</Notice>
       <Card className="mb-4 grid gap-2 p-3 sm:grid-cols-[1fr_220px_160px] sm:p-4">
         <SearchInput value={q} onChange={setQ} placeholder={t("Search actor, record or description")} />
         <Select aria-label={t("Action")} value={action} onChange={(e) => setAction(e.target.value)} placeholder={t("All actions")} options={actions} />

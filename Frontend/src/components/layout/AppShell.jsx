@@ -193,7 +193,7 @@ export default function AppShell() {
                 </Link>
                 <NavList role={role} onNavigate={() => setDrawer(false)} />
               </div>
-              <div className="border-t border-line p-3 pb-safe">
+              <div className="border-t border-line px-3 pt-3 pb-safe-3">
                 <div className="flex items-center gap-3 px-1">
                   <Avatar name={user?.name} size={38} />
                   <div className="min-w-0 flex-1"><p className="truncate text-[13.5px] font-bold">{user?.name}</p><p className="truncate text-[12px] text-ink-muted">{t(ROLE_LABELS[role])}</p></div>
