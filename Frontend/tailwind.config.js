@@ -1,6 +1,11 @@
+import { fileURLToPath } from 'node:url'
+
+// Content paths are resolved from this file, not from the directory Vite was started in.
+const here = (p) => fileURLToPath(new URL(p, import.meta.url)).replace(/\\/g, '/')
+
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: [here('./index.html'), here('./src/**/*.{js,jsx}')],
   theme: {
     extend: {
       colors: {
