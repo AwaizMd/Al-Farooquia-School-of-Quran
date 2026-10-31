@@ -64,6 +64,7 @@ It also creates one sign-in per role. The password for all of them is `farooquia
 | `npm start` / `npm run worker` | Run the compiled API / worker |
 | `npm run db:migrate` | Create a migration after editing `prisma/schema.prisma` (development only) |
 | `npm run db:deploy` | Apply pending migrations (the only command for production) |
+| `npm run db:setup` | Starting configuration for a new installation: Madarsa details, halqas and fee plans (no people). Safe to rerun |
 | `npm run create-admin -- --email … --name "…"` | First administrator + one-time setup link (`node dist/cli/create-admin.js` in production) |
 | `npm run mfa:break-glass -- --user … --reason "…"` | Emergency authenticator reset when no administrator can sign in |
 | `node scripts/gen-quran.mjs` | Regenerate the Quran reference data from the web app's copy |

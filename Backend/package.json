@@ -24,7 +24,8 @@
     "mfa:break-glass": "tsx scripts/mfa-break-glass.ts",
     "worker": "node dist/worker.js",
     "dev:worker": "tsx watch src/worker.ts",
-    "create-admin": "tsx src/cli/create-admin.ts"
+    "create-admin": "tsx src/cli/create-admin.ts",
+    "db:setup": "tsx prisma/setup.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

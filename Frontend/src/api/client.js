@@ -73,14 +73,19 @@ export async function upload(path, file, { method = 'PUT', type = file.type, nam
 }
 
 /** Read a one-time token from the URL and remove it so it is not kept in history or shared by accident. */
+// Remembered for the page it came from, so a second call (React StrictMode runs state
+// initialisers twice; a page can remount) still gets it after it left the address bar.
+let takenToken = null
 export function takeUrlToken() {
   const url = new URL(window.location.href)
   const token = url.searchParams.get('token')
   if (token) {
+    takenToken = { path: url.pathname, token }
     url.searchParams.delete('token')
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+    return token
   }
-  return token
+  return takenToken?.path === url.pathname ? takenToken.token : null
 }
 
 /** Fetch a private file (QR image, proof of payment) and return an object URL for <img> or a new tab. */

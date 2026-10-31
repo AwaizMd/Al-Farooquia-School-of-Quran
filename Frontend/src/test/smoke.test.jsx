@@ -108,3 +108,15 @@ describe('server-scoped data reaches the screens', () => {
     await screen.findByText('Not available for this role')
   })
 })
+
+describe('one-time links', () => {
+  it('an invitation link still works when the page reads its token twice (StrictMode)', async () => {
+    const { takeUrlToken } = await import('../api/client')
+    window.history.pushState({}, '', '/accept-invite?token=abc123token456def789ghi')
+    expect(takeUrlToken()).toBe('abc123token456def789ghi')
+    expect(window.location.search).toBe('') // removed from the address bar
+    expect(takeUrlToken()).toBe('abc123token456def789ghi')
+    window.history.pushState({}, '', '/reset-password')
+    expect(takeUrlToken()).toBeNull() // not carried over to another page
+  })
+})
