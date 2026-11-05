@@ -3,8 +3,9 @@
 // labelled as such; the QR encodes plain text, not a UPI payment address.
 import { createHash, randomUUID } from 'node:crypto'
 import QRCode from 'qrcode'
-import type { PrismaClient } from '../src/generated/prisma/client.js'
+import type { Db as PrismaClient } from '../src/database/prisma.js'
 import { localStorage as disk } from '../src/integrations/storage/storage.js'
+import { activeMadrasaId } from '../src/tenancy/context.js'
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
@@ -29,17 +30,16 @@ export async function seedPayments(prisma: PrismaClient, today: string) {
     return prisma.storedFile.create({ data: { storageKey: key, originalName: name, mimeType, sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), uploadedById, purpose } })
   }
 
-  // All three methods on: the development gateway for "Pay Online", plus demo bank and UPI details.
-  const settings = await prisma.paymentSettings.findUnique({ where: { institutionId: 1 } })
+  // Bank transfer and UPI on, with demo details.
+  const settings = await prisma.paymentSettings.findUnique({ where: { madrasaId: activeMadrasaId() } })
   const qr = settings?.upiQrFileId ? null : await saveFile(await QRCode.toBuffer('DEMO ONLY - NOT A PAYMENT QR - Al Farooquia development data', { width: 360, margin: 2 }), 'image/png', 'png', 'demo-upi-qr.png', 'UPI_QR', null)
   const demo = {
-    razorpayEnabled: true,
     bankEnabled: true, bankAccountName: 'Al Farooquia Educational Trust (DEMO)', bankName: 'Demo Bank of India', bankAccountNumber: '000000123456789', bankIfsc: 'DEMO0000001',
     bankBranch: 'Old City (demo)', bankAccountType: 'Current', bankInstructions: 'DEMO DATA: this is not a real account. Write the admission number in the transfer remarks.', bankReferenceHint: 'Admission number, e.g. S-1001',
     bankProofRequired: false, upiEnabled: true, upiId: 'demo.farooquia@upi', upiPayeeName: 'Al Farooquia Trust (DEMO)', upiInstructions: 'DEMO DATA: the QR code does not accept payments.', upiProofRequired: false,
     ...(qr ? { upiQrFileId: qr.id } : {}),
   }
-  await prisma.paymentSettings.upsert({ where: { institutionId: 1 }, update: demo, create: { institutionId: 1, ...demo } })
+  await prisma.paymentSettings.upsert({ where: { madrasaId: activeMadrasaId() }, update: demo, create: demo })
 
   const user = async (ident: string) => (await prisma.user.findFirst({ where: { OR: [{ email: ident }, { username: ident }] } }))?.id
   const admin = await user('admin@farooquia.demo')
@@ -76,8 +76,8 @@ export async function seedPayments(prisma: PrismaClient, today: string) {
       },
     })
     await prisma.auditLog.create({ data: { actorUserId: c.by, actorName: c.by === javed ? 'Javed Khan' : 'Farhan Qureshi', actorRole: 'PARENT', action: 'fees.manual_payment_submitted', summary: `${c.method === 'UPI' ? 'UPI' : 'bank transfer'} of Rs ${(amount / 100).toFixed(2)} reported (ref ${c.ref}); awaiting verification (demo data)`, entityType: 'manual_payment', entityId: sub.id } })
-    if (c.review) await prisma.auditLog.create({ data: { actorUserId: admin, actorName: 'Maulana Shoaib Akhtar', actorRole: 'ADMIN', action: c.status === 'REJECTED' ? 'fees.manual_payment_rejected' : 'fees.manual_payment_info_requested', summary: `${c.status === 'REJECTED' ? 'Rejected' : 'More information requested'}: ${c.review} (demo data)`, entityType: 'manual_payment', entityId: sub.id } })
+    if (c.review) await prisma.auditLog.create({ data: { actorUserId: admin, actorName: 'Maulana Shoaib Akhtar', actorRole: 'SUPER_ADMIN', action: c.status === 'REJECTED' ? 'fees.manual_payment_rejected' : 'fees.manual_payment_info_requested', summary: `${c.status === 'REJECTED' ? 'Rejected' : 'More information requested'}: ${c.review} (demo data)`, entityType: 'manual_payment', entityId: sub.id } })
     made++
   }
-  return `bank + UPI + online switched on (demo details), ${made} reported payments`
+  return `bank + UPI switched on (demo details), ${made} reported payments`
 }

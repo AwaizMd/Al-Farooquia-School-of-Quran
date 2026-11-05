@@ -1,4 +1,4 @@
-import { apiUrl, get } from './client'
+import { get } from './client'
 
 // Converts API people records into the shapes the existing screens use.
 // Screens keep human-readable codes as ids (admission number, staff/guardian/
@@ -51,7 +51,7 @@ export const toMentor = (m) => ({ id: m.code, uuid: m.id, name: m.displayName, r
 
 /** Everything about people the signed-in account may see, ready for the store. */
 export async function loadPeople(user) {
-  const canListGuardians = user?.roles?.some((r) => r === 'ADMIN' || r === 'PRINCIPAL')
+  const canListGuardians = user?.permissions?.includes('guardians.read')
   const [students, groups, staff, plans, guardians] = await Promise.all([
     all('/students'),
     get('/groups').then((r) => r.items),
@@ -147,22 +147,14 @@ export async function loadInbox() {
   }
 }
 
-const AUDIENCE_LABEL = { ALL_STUDENTS: 'All students', HIFZ: 'Hifz groups', ALIM: 'Alimiyyah', STAFF_ONLY: 'Staff only' }
-export const AUDIENCE_CODE = Object.fromEntries(Object.entries(AUDIENCE_LABEL).map(([k, v]) => [v, k]))
-
-/** Library catalogue; hostel rooms, beds and roll calls only for accounts that may see them. */
+/** Hostel rooms, beds and roll calls, only for accounts that may see them in a madrasa that runs a hostel. */
 export async function loadCampus(user) {
-  const canSeeHostel = user?.roles?.some((r) => r === 'ADMIN' || r === 'PRINCIPAL' || r === 'WARDEN')
-  const [library, hostel, roll] = await Promise.all([
-    get('/library'),
+  const canSeeHostel = user?.permissions?.includes('hostel.read') && user?.madrasa?.features?.HOSTEL !== false
+  const [hostel, roll] = await Promise.all([
     canSeeHostel ? get('/hostel') : Promise.resolve(null),
     canSeeHostel ? get('/hostel/roll-call') : Promise.resolve(null),
   ])
   return {
-    library: library.items.map((r) => ({
-      id: r.id, title: r.title, category: r.category, type: r.type, author: r.author ?? '', description: r.description ?? '', pages: r.pages, uploaded: r.uploadedAt.slice(0, 10), uploadedBy: r.uploadedBy,
-      access: AUDIENCE_LABEL[r.audience], canOpen: r.canOpen, file: r.file ? apiUrl(`/library/${r.id}/file`) : null, fileName: r.file?.name ?? null, mimeType: r.file?.mimeType ?? null,
-    })),
     rooms: hostel ? hostel.rooms.map((r) => ({ id: r.code, uuid: r.id, block: r.block, floor: r.floor, beds: r.beds.length })) : [],
     beds: hostel ? hostel.rooms.flatMap((r) => r.beds.map((b) => ({ id: b.id, roomId: r.code, label: b.label, studentId: b.occupant?.admissionNo ?? null }))) : [],
     hostelAttendance: roll ? roll.days : {},

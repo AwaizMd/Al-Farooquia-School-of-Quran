@@ -1,6 +1,9 @@
 export const ROLE_LABELS = {
   admin: 'Admin',
   principal: 'Principal',
+  accountant: 'Accountant',
+  ca: 'Chartered Accountant',
+  committee: 'Committee Member',
   warden: 'Warden',
   mentor: 'Mentor',
   student: 'Student',

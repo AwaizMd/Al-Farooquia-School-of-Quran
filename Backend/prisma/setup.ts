@@ -1,9 +1,12 @@
-// Starting configuration for a new installation: the Madarsa's details, its halqas
-// and its fee plans. No people, accounts or activity. Safe to run more than once:
-// anything that already exists is left as it is. Edit details later in Settings.
-//   npm run db:setup     (production: node dist/... is not needed; run with tsx from Backend/)
+// Starting configuration for a new installation: the organization, its first madrasa
+// (code MAIN) with default settings, halqas and fee plans. No people, accounts or
+// activity. Safe to run more than once: anything that already exists is left as it
+// is. Edit details later in Settings; add more madrasas as Super Admin.
+//   npm run db:setup
 import { prisma } from '../src/database/prisma.js'
 import type { GroupGender, Track } from '../src/generated/prisma/enums.js'
+import { withMadrasa } from '../src/tenancy/context.js'
+import { ensureMadrasa } from './bootstrap.js'
 
 const HALQAS: { code: string; name: string; short: string; track: Track; room: string; timing: string; gender: GroupGender }[] = [
   { code: 'g-hifz-a', name: 'Hifz Halqa A', short: 'Hifz A', track: 'HIFZ', room: 'Hall 1', timing: 'After Fajr – 12:30 pm', gender: 'BOYS' },
@@ -21,25 +24,22 @@ const FEE_PLANS = [
   { code: 'fp-res', name: 'Residential (Hostel)', amountMinor: 350000, covers: 'Tuition, boarding & three meals' },
 ]
 
-await prisma.institutionSettings.upsert({
-  where: { id: 1 },
-  update: {},
-  create: {
-    id: 1, brandName: 'Al Farooquia School of Quran', shortName: 'Al Farooquia', brandArabic: 'مدرسۃ القرآن الفاروقیۃ', tagline: 'Madarsa Management System',
-    address: 'Hyderabad, Telangana, India', phone: '', email: 'office@example.org', currency: 'INR', timezone: 'Asia/Kolkata', weeklyOff: 5, feeDueDay: 10,
-  },
+const madrasaId = await ensureMadrasa({ code: 'MAIN', name: 'Al Farooquia School of Quran', shortName: 'Al Farooquia', nameArabic: 'مدرسۃ القرآن الفاروقیۃ', address: 'Hyderabad, Telangana, India', phone: '', email: 'office@example.org' })
+const { halqas, plans } = await withMadrasa(madrasaId, async () => {
+  let halqas = 0
+  for (const h of HALQAS) {
+    if (await prisma.group.findFirst({ where: { code: h.code } })) continue
+    await prisma.group.create({ data: h })
+    halqas++
+  }
+  let plans = 0
+  for (const p of FEE_PLANS) {
+    if (await prisma.feePlan.findFirst({ where: { code: p.code } })) continue
+    await prisma.feePlan.create({ data: { ...p, currency: 'INR', cycle: 'MONTHLY' } })
+    plans++
+  }
+  return { halqas, plans }
 })
-let halqas = 0
-for (const h of HALQAS) {
-  if (await prisma.group.findUnique({ where: { code: h.code } })) continue
-  await prisma.group.create({ data: h })
-  halqas++
-}
-let plans = 0
-for (const p of FEE_PLANS) {
-  if (await prisma.feePlan.findUnique({ where: { code: p.code } })) continue
-  await prisma.feePlan.create({ data: { ...p, currency: 'INR', cycle: 'MONTHLY' } })
-  plans++
-}
-console.log(`Setup: Madarsa details ready, ${halqas} halqa(s) and ${plans} fee plan(s) added.`)
+// eslint-disable-next-line no-console -- command-line output
+console.log(`Setup: organization and madrasa MAIN ready, ${halqas} halqa(s) and ${plans} fee plan(s) added.`)
 await prisma.$disconnect()

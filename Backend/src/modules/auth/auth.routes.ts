@@ -37,7 +37,7 @@ authRouter.post('/logout', async (req, res) => {
 doc('get', '/auth/session', T, 'Current session, stage and CSRF token')
 authRouter.get('/session', async (req, res) => {
   if (!req.auth) throw unauthenticated()
-  res.json(await auth.sessionView(req.auth.user.id, req.auth.session.stage, req.auth.session.csrfToken))
+  res.json(await auth.sessionView(req.auth.user.id, req.auth.session.stage, req.auth.session.csrfToken, req.auth.madrasa?.activeId))
 })
 
 doc('post', '/auth/reauthenticate', T, 'Confirm password (and code) before a sensitive action', { body: Reauth, auth: 'full session' })

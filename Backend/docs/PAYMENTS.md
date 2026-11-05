@@ -1,42 +1,35 @@
 # Fee payments: methods, workflows and rules
 
-Each Madarsa chooses how families pay, in **Fee Payment Settings**. The choice takes effect immediately, with no deployment:
+There is **no payment gateway**. Razorpay was removed in CR-01. Families pay each
+madrasa **directly into its own account**, by bank transfer or UPI. The office
+verifies each payment before it counts. Office staff record cash and cheques themselves.
 
-| Mode | What families see |
-|---|---|
-| Razorpay only | **Pay Online**: confirmed automatically by the gateway |
-| Bank Transfer / UPI QR only | **Bank Transfer** and/or **Pay Using UPI QR**: confirmed by the office |
-| Both | Families choose between them |
+Each madrasa sets up its own methods in **Fee Payment Settings**:
+
+| Method | What families see | Counts toward dues when |
+|---|---|---|
+| Bank transfer | The madrasa's account details to copy | staff verify the reported UTR against the bank statement |
+| UPI QR | The madrasa's own QR code, plus an "Open UPI app" link on phones | staff verify the reported reference |
+| Cash, cheque | (paid at the office) | the office records it; a receipt is issued |
 
 Families see a method only when it is **switched on and fully set up**. If nothing is set up, they are asked to contact the office.
 
-All methods feed **one fee ledger**: invoices, payments, allocations (oldest invoice first), refunds and receipts. Balances are always calculated on the server from that ledger. Money is stored as whole paise (INR).
+All methods feed **one fee ledger**: invoices, payments, allocations (oldest invoice first), refunds and receipts. Balances are always calculated on the server from that ledger. Money is stored as whole paise (INR). A reported payment changes nothing until it is verified, and reminders keep going until then.
 
 ## Who can do what
 
-| | Admin | Principal | Mentor / Warden | Parent | Student |
+| | Madrasa Admin / Super Admin | Accountant | Principal | CA | Parent |
 |---|---|---|---|---|---|
-| Change payment settings (`payments.configure`) | ✓ | — | — | — | — |
-| See reported payments | all | all (read-only) | — | own children | own |
-| Approve, reject or request information (`fees.verify`) | ✓ | — | — | — | — |
-| Report a bank/UPI payment, see bank details and the QR | — | — | — | linked guardians with payment rights | — |
+| Bank details and UPI QR (`payments.configure`) | ✓ | — | — | — | — |
+| Record cash and cheque payments, issue invoices | ✓ | ✓ | — | — | — |
+| See reported payments | all | all | all (read-only) | all (read-only) | own children |
+| Approve, reject or request information (`fees.verify`) | ✓ | ✓ | — | — | — |
+| Waivers, corrections and refunds | ✓ | — | — | — | — |
+| Report a bank or UPI payment, and see bank details and the QR | — | — | — | — | linked guardians with payment rights |
 
-Everything is enforced by the API. Nobody can approve a payment they reported themselves.
+Everything is enforced by the API, per madrasa: staff of one madrasa never see another madrasa's payments. Nobody can approve a payment they reported themselves.
 
-## Setting up
-
-### Razorpay
-
-1. On the server, set `SETTINGS_ENCRYPTION_KEYS` and `SETTINGS_ACTIVE_KEY_VERSION`. These seal the secrets you enter in the app (AES-256-GCM).
-2. In the Razorpay Dashboard, create API keys. Add a webhook pointing to the URL shown in Fee Payment Settings, with the events `payment.captured`, `order.paid`, `payment.failed` and `refund.processed`, and a secret of your choice.
-3. In Fee Payment Settings, choose **Test mode**, then enter the Key ID, Key Secret and webhook secret, and click **Save keys & validate**. The server checks the keys with Razorpay.
-4. Switch Razorpay on. Test mode is ready once the keys validate.
-5. For **Live mode**, enter live keys (`rzp_live_…`) and validate them. Then send a test webhook from the Razorpay Dashboard. Live mode can be switched on only after one correctly signed webhook has arrived for those keys.
-
-How secrets are handled:
-- **Never returned.** The Key Secret and webhook secret never come back from the API. The screen shows only that they are saved, and the Key ID is masked.
-- **Server-managed alternative.** Setting `PAYMENT_PROVIDER=razorpay` with the `RAZORPAY_*` environment variables makes the keys server-managed; the screen then shows them as read-only.
-- **Development.** `PAYMENT_PROVIDER=dev` uses a local simulator that moves no money. It is refused in production.
+## Setting up (per madrasa)
 
 ### Bank transfer
 
@@ -46,26 +39,17 @@ Enter:
 
 You can also require proof of payment. The method can be switched on only when the required fields are valid.
 
-Bank details are given only to a guardian paying for a linked child, and to fee staff for preview.
+Bank details are given only to a guardian paying for a linked child (that child's madrasa) and to fee staff for preview.
 
 ### UPI QR
 
-Upload the Madarsa's **own** QR code from its bank or UPI app as a PNG, JPEG or WebP image of up to 2 MB. The type is checked by the file's content. The app never generates or substitutes a QR code.
+Upload the madrasa's **own** QR code from its bank or UPI app as a PNG, JPEG or WebP image of up to 2 MB. The type is checked by the file's content. The app never generates or substitutes a QR code.
 
 You can also add a UPI ID, which enables an "Open UPI app" link on phones. That link is a convenience only: not every UPI app honours it, so the QR code is always shown.
 
 Removing the QR code switches UPI off.
 
-## Online payment (Razorpay)
-
-1. The parent chooses invoices. The **server** works out the amount from its own records and creates the Razorpay order. Any amount the browser sends is ignored.
-2. Razorpay's checkout returns ids and a signature. The server checks the signature, then **fetches the payment from Razorpay** and credits it only if it was captured for this order with the right amount and currency.
-3. The signed webhook does the same independently. Events are deduplicated, and a payment attempt can credit at most once. A delivery whose processing failed is processed again when the gateway retries.
-4. A redirect or the browser saying "success" is never proof of payment.
-
-Once a method is switched off, no new orders are created. Webhooks and refunds for earlier payments still work.
-
-## Bank transfer and UPI: manual verification
+## Bank transfer and UPI: verification
 
 ```
 reported ──► PENDING_VERIFICATION ──► APPROVED  (payment + receipt recorded)
@@ -76,8 +60,8 @@ reported ──► PENDING_VERIFICATION ──► APPROVED  (payment + receipt r
 
 1. **Report.** The guardian picks the invoices and enters the amount, payment date, UTR/transaction reference, an optional note and proof (if required).
 
-   The report is a **claim**: no balance changes. The family is told "Payment submitted for verification", and fee staff get a "Payment to verify" notice.
-2. **Check.** Staff confirm the credit in the Madarsa's bank statement. A screenshot or UTR alone is **not** proof, because screenshots can be edited. The app does not reconcile with the bank automatically.
+   The report is a **claim**: no balance changes. The family is told "Payment submitted for verification". Everyone in that madrasa who can verify payments gets a "Payment to verify" notice.
+2. **Check.** Staff confirm the credit in the madrasa's bank statement. A screenshot or UTR alone is **not** proof, because screenshots can be edited. Automatic matching against an imported bank statement is planned (CR-01 phase 2); until then this check is manual.
 3. **Approve.** In one database transaction:
    - the submission row is locked and must still be pending,
    - the reference is checked against approved claims and the ledger,
@@ -92,47 +76,49 @@ reported ──► PENDING_VERIFICATION ──► APPROVED  (payment + receipt r
 - **Amount.**
   - A family can claim at most the outstanding balance of the chosen invoices, *minus* their claims already waiting for verification.
   - Staff confirm the amount actually received. It is pre-filled; if it differs, a note is required.
-  - If the money exceeds the balance at approval time (for example, the office took cash meanwhile), it is still recorded. The excess is kept unallocated and flagged for review, as for online payments.
+  - If the money exceeds the balance at approval time (for example, the office took cash meanwhile), it is still recorded. The excess is kept unallocated and flagged for review.
 - **Partial payments** are allowed. They are applied oldest invoice first.
 - **Duplicate UTR.**
   - References are compared ignoring spaces, dashes and case.
-  - A reference already pending, waiting for information, approved, or already in the ledger is refused. A database index enforces this as well.
+  - Within a madrasa, a reference that is already pending, waiting for information, approved, or in the ledger is refused. Database indexes on `(madrasaId, reference)` enforce this as well.
   - A rejected reference may be reported again, and staff see a warning listing its earlier use.
 - **Proof files** are private:
   - The type is checked by content (PDF, PNG, JPEG or WebP, up to 5 MB).
   - A file can be attached only by its uploader.
   - Every download is authorised and served with `Content-Disposition` and a sandboxing CSP.
-  - Files are kept with the financial record. There is no automatic deletion; set a retention policy if the Madarsa needs one.
+  - Files are kept with the financial record. There is no automatic deletion; set a retention policy if the madrasa needs one.
 - **Separation of duties:** a staff member who reported a payment (for example, an admin who is also a parent) cannot review it.
 
 ## Receipts
 
-Every approved or confirmed payment gets one receipt number, `NR-<financial year>-<sequence>`, gapless within each April–March year. The receipt shows:
-- the institution and student,
+Every recorded or approved payment gets a receipt number from its madrasa's own series, `<prefix>-<financial year>-<sequence>`. The prefix is set in the madrasa's configuration and defaults to `NR`. Numbers are gapless within each April–March year and unique within the madrasa.
+
+The receipt shows:
+- the madrasa and student,
 - the invoices paid and the amount,
 - the method and date,
-- the reference (UTR or gateway payment id),
-- who recorded it, marked "(verified)" for manual payments.
+- the reference (UTR, cheque number or bank reference),
+- who recorded it, marked "(verified)" for reported payments.
 
-Payments and receipts cannot be edited. Use a refund to reverse a payment.
+Payments and receipts cannot be edited. Use a refund to reverse a payment. Refunds are paid back by the office (cash, cheque or transfer) and are complete when recorded.
 
 ## API
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/v1/payments/options?studentId=` | Methods offered, with bank and UPI details for the payer |
-| `GET /api/v1/payments/upi-qr` | QR image (payers and fee staff) |
-| `POST /api/v1/payments/attempts`, `POST …/attempts/:id/verify`, `GET …/attempts/:id` | Online checkout |
-| `POST /api/v1/payments/webhooks/razorpay` | Signed gateway callback |
+| `GET /api/v1/payments/options?studentId=` | Methods offered by the student's madrasa, with bank and UPI details for the payer |
+| `GET /api/v1/payments/upi-qr?studentId=` | That madrasa's QR image (payers and fee staff) |
 | `POST /api/v1/payments/proofs` | Upload proof (raw body) |
 | `POST`/`GET /api/v1/payments/submissions`, `GET`/`PATCH …/:id`, `GET …/:id/proof` | Report, list, view and reply |
 | `POST …/submissions/:id/approve` \| `/reject` \| `/request-info` | Verification (`fees.verify`) |
-| `GET`/`PUT /api/v1/admin/payment-settings`, `POST …/razorpay/validate`, `PUT`/`DELETE …/upi-qr` | Settings (`payments.configure`; changes need recent re-authentication) |
+| `GET`/`PUT /api/v1/admin/payment-settings`, `PUT`/`DELETE …/upi-qr` | Settings of the active madrasa (`payments.configure`; changes need recent re-authentication) |
 
 The full reference is at `/api/docs` when `API_DOCS_ENABLED=true`.
 
-## Not yet verified
+## Not yet built (CR-01 phase 2)
 
-- **Razorpay:** the adapter is tested against a local fake of Razorpay's API, not against Razorpay itself. Run it in **test mode** with a real test account before going live.
-- **Bank reconciliation** is manual. The app doesn't connect to a bank.
-- **Notifications** for these events are in-app. Email for payment events isn't sent separately.
+- Cheque status (received / deposited / cleared / bounced, with reversal on bounce).
+- Bank statement import with automatic matching.
+- A unique UPI reference per due, in the deep link.
+
+Until these exist, record cheques as office payments and reverse a bounced cheque with a refund. Reconciliation stays manual.

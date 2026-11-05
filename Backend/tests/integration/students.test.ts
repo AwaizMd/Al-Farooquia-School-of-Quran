@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, client, type Client } from '../helpers/auth.js'
 import { seedPeopleFixture } from '../helpers/people.js'

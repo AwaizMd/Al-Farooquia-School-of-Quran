@@ -10,7 +10,7 @@ const LABEL = {
   'exam.scheduled': 'Examination scheduled', 'exam.results_saved': 'Assessment results updated', 'exam.published': 'Results published', 'exam.grading_changed': 'Grading scale updated',
   'fees.payment_recorded': 'Fee payment recorded', 'fees.online_payment_confirmed': 'Online payment confirmed', 'fees.invoices_issued': 'Invoices issued', 'fees.refund': 'Refund recorded',
   'fees.invoice_adjusted': 'Invoice adjusted', 'reminders.sent_manually': 'Fee reminder sent', 'hostel.assigned': 'Hostel bed assigned', 'hostel.transferred': 'Hostel transfer',
-  'hostel.released': 'Hostel bed vacated', 'hostel.roll_call': 'Hostel roll call saved', 'library.added': 'Library resource added', 'settings.updated': 'Settings updated',
+  'hostel.released': 'Hostel bed vacated', 'hostel.roll_call': 'Hostel roll call saved', 'settings.updated': 'Settings updated',
   'mfa.reset_by_admin': 'Two-step verification reset', 'user.created': 'Account created', 'export.csv': 'CSV exported', 'report.previewed': 'Report previewed',
 }
 const roleOf = (r) => (r || '').split(',')[0].toLowerCase()

@@ -7,16 +7,18 @@ import { audit } from '../audit-logs/audit.service.js'
 import { gradeFor } from '../assessments/assessments.service.js'
 import { guardiansOf, queueDelivery } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
+import { activeMadrasaId } from '../../tenancy/context.js'
+import { madrasaProfile } from '../../tenancy/settings.js'
 
 export const SECTIONS = ['attendance', 'learning', 'assessments', 'feedback'] as const
 
 export async function getConfig() {
-  return prisma.scheduledReportConfig.findUniqueOrThrow({ where: { id: 1 } })
+  return prisma.scheduledReportConfig.findUniqueOrThrow({ where: { madrasaId: activeMadrasaId() } })
 }
 
 export async function setConfig(req: Request, c: { enabled: boolean; frequency: ReportFrequency; dayOfWeek: number; dayOfMonth: number; sendAt: string; channels: NotificationChannel[]; sections: string[] }) {
   if (c.sections.some((s) => !(SECTIONS as readonly string[]).includes(s))) throw new AppError(422, 'VALIDATION_FAILED', 'Unknown report section.')
-  const saved = await prisma.scheduledReportConfig.update({ where: { id: 1 }, data: c })
+  const saved = await prisma.scheduledReportConfig.update({ where: { madrasaId: activeMadrasaId() }, data: c })
   await audit({ action: 'reports.schedule_changed', summary: `${c.enabled ? c.frequency.toLowerCase() : 'disabled'} at ${c.sendAt}`, entityType: 'scheduled_report_config' }, req)
   return saved
 }
@@ -66,10 +68,10 @@ export async function runReport(period: { key: string; start: string; end: strin
   }
   try {
     const students = await prisma.student.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true } })
-    const settings = await prisma.institutionSettings.findUnique({ where: { id: 1 } })
+    const madrasa = await madrasaProfile()
     let queued = 0
     for (const s of students) {
-      const text = await buildReport(s.id, s.name, period, config.sections, settings?.brandName ?? 'the Madarsa')
+      const text = await buildReport(s.id, s.name, period, config.sections, madrasa.name)
       for (const g of await guardiansOf(prisma, s.id)) {
         for (const channel of config.channels) {
           if (channel === 'IN_APP' && !g.userId) continue

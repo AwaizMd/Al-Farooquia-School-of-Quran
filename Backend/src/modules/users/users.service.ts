@@ -3,42 +3,87 @@ import type { Prisma } from '../../generated/prisma/client.js'
 import type { Role, UserStatus } from '../../generated/prisma/enums.js'
 import { env } from '../../config/env.js'
 import { AppError, conflict, notFound } from '../../common/errors.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { sendMail } from '../../integrations/mail/mailer.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { revokeAllCredentials } from '../mfa/mfa.service.js'
 import { normaliseIdentifier } from '../auth/auth.service.js'
 import { revokeAllSessions } from '../auth/session.service.js'
 import { TOKEN_TTL_MS, issueToken } from '../auth/tokens.js'
+import { activeMadrasaId, asOrg } from '../../tenancy/context.js'
+import { ORG_ROLES } from '../../tenancy/access.js'
 
 const IN_PERSON_TICKET_TTL_MS = 15 * 60 * 1000
 
-const publicUser = { id: true, email: true, username: true, displayName: true, phone: true, status: true, locale: true, createdAt: true, emailVerifiedAt: true, mfaRecoveryPending: true, roles: { select: { role: true } } } satisfies Prisma.UserSelect
+// Accounts are organization-wide (one person, one sign-in) but roles are granted per
+// madrasa (madrasa_memberships). An administrator sees and manages the accounts that
+// belong to their active madrasa; anything spanning madrasas needs org.manage.
+
+/** Roles granted per madrasa; the rest (ORG_ROLES) live in user_roles. */
+export const MADRASA_ROLES: readonly Role[] = ['MADRASA_ADMIN', 'PRINCIPAL', 'COMMITTEE_MEMBER', 'CA', 'ACCOUNTANT', 'MENTOR', 'WARDEN']
+
+const publicUser = { id: true, email: true, username: true, displayName: true, phone: true, status: true, locale: true, createdAt: true, emailVerifiedAt: true, mfaRecoveryPending: true, roles: { select: { role: true } }, memberships: { select: { madrasaId: true, role: true, active: true, expiresAt: true } } } satisfies Prisma.UserSelect
 
 type PublicUser = Prisma.UserGetPayload<{ select: typeof publicUser }>
-const view = async (u: PublicUser) => ({
-  ...u,
-  roles: u.roles.map((r) => r.role),
-  mfaEnabled: (await prisma.mfaCredential.count({ where: { userId: u.id, status: 'ACTIVE' } })) > 0,
-})
-
-export async function listUsers(q: { search?: string; role?: Role; status?: UserStatus; page: number; pageSize: number }) {
-  const where: Prisma.UserWhereInput = {
-    ...(q.status ? { status: q.status } : {}),
-    ...(q.role ? { roles: { some: { role: q.role } } } : {}),
-    ...(q.search ? { OR: [{ displayName: { contains: q.search, mode: 'insensitive' } }, { email: { contains: q.search.toLowerCase() } }, { username: { contains: q.search.toLowerCase() } }] } : {}),
+const view = async (u: PublicUser) => {
+  const here = activeMadrasaId()
+  const { memberships, ...rest } = u
+  const local = memberships.filter((m) => m.madrasaId === here && m.active && (!m.expiresAt || m.expiresAt > new Date()))
+  return {
+    ...rest,
+    // Roles in this madrasa plus organization-wide ones.
+    roles: [...u.roles.map((r) => r.role), ...local.map((m) => m.role)],
+    expiresAt: Object.fromEntries(local.filter((m) => m.expiresAt).map((m) => [m.role, m.expiresAt])),
+    otherMadrasas: new Set(memberships.filter((m) => m.madrasaId !== here).map((m) => m.madrasaId)).size,
+    mfaEnabled: (await prisma.mfaCredential.count({ where: { userId: u.id, status: 'ACTIVE' } })) > 0,
   }
-  const [total, rows] = await Promise.all([
+}
+
+/** Accounts that belong to the active madrasa: created there, its staff, its families, its students (org.manage sees every account). */
+function belongsHere(orgWide: boolean): Prisma.UserWhereInput {
+  if (orgWide) return {}
+  const madrasaId = activeMadrasaId()
+  return { OR: [{ homeMadrasaId: madrasaId }, { memberships: { some: { madrasaId } } }, { guardianProfile: { students: { some: { madrasaId } } } }, { studentProfile: { madrasaId } }] }
+}
+
+export async function listUsers(q: { search?: string | undefined; role?: Role | undefined; status?: UserStatus | undefined; page: number; pageSize: number }) {
+  const madrasaId = activeMadrasaId()
+  const roleFilter: Prisma.UserWhereInput | undefined = q.role ? (MADRASA_ROLES.includes(q.role) ? { memberships: { some: { madrasaId, role: q.role, active: true } } } : { roles: { some: { role: q.role } } }) : undefined
+  const where: Prisma.UserWhereInput = {
+    AND: [
+      belongsHere(false),
+      ...(q.status ? [{ status: q.status }] : []),
+      ...(roleFilter ? [roleFilter] : []),
+      ...(q.search ? [{ OR: [{ displayName: { contains: q.search, mode: 'insensitive' as const } }, { email: { contains: q.search.toLowerCase() } }, { username: { contains: q.search.toLowerCase() } }] }] : []),
+    ],
+  }
+  // Guardian and student links are madrasa-scoped rows: read them across the organization, filtered to this madrasa above.
+  const [total, rows] = await asOrg('users of one madrasa (filtered by madrasaId)', () => Promise.all([
     prisma.user.count({ where }),
     prisma.user.findMany({ where, select: publicUser, orderBy: { displayName: 'asc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
-  ])
+  ]))
   return { total, page: q.page, pageSize: q.pageSize, items: await Promise.all(rows.map(view)) }
 }
 
-export async function getUser(id: string) {
-  const u = await prisma.user.findUnique({ where: { id }, select: publicUser })
+/** One account, only if it belongs to the active madrasa (or the caller manages the organization). 404 otherwise. */
+async function visibleUser(req: Request, id: string, db: Tx | typeof prisma = prisma) {
+  const where = { id, ...belongsHere(req.auth!.permissions.has('org.manage')) }
+  const u = await asOrg('look up an account of this madrasa', () => db.user.findFirst({ where, select: publicUser }))
   if (!u) throw notFound()
-  return view(u)
+  return u
+}
+
+export async function getUser(req: Request, id: string) {
+  return view(await visibleUser(req, id))
+}
+
+/** Only the organization may grant SUPER_ADMIN; an account active in other madrasas is changed there or by the organization. */
+function assertMayGrant(req: Request, roles: readonly Role[]) {
+  if (roles.includes('SUPER_ADMIN') && !req.auth!.permissions.has('org.manage')) throw new AppError(403, 'FORBIDDEN', 'Only a Super Admin can grant organization-wide administration.')
+}
+
+function splitRoles(roles: readonly Role[]) {
+  return { org: roles.filter((r) => ORG_ROLES.includes(r)), local: roles.filter((r) => MADRASA_ROLES.includes(r)) }
 }
 
 /** Sends the invitation. Accounts without email get a setup link for the office to hand over in person. */
@@ -51,9 +96,12 @@ async function deliverInvite(user: { id: string; email: string | null; displayNa
 }
 
 export type AccountLink = { kind: 'staff' | 'guardian' | 'student'; id: string }
-const LINK_ROLES: Record<AccountLink['kind'], Role[]> = { staff: ['ADMIN', 'PRINCIPAL', 'MENTOR', 'WARDEN'], guardian: ['PARENT'], student: ['STUDENT'] }
+const LINK_ROLES: Record<AccountLink['kind'], Role[]> = { staff: ['MADRASA_ADMIN', 'PRINCIPAL', 'ACCOUNTANT', 'MENTOR', 'WARDEN'], guardian: ['PARENT'], student: ['STUDENT'] }
 
-export async function createUser(req: Request, input: { displayName: string; email?: string | undefined; username?: string | undefined; phone?: string | undefined; roles: Role[]; link?: AccountLink | undefined }) {
+export async function createUser(req: Request, input: { displayName: string; email?: string | undefined; username?: string | undefined; phone?: string | undefined; roles: Role[]; expiresAt?: Date | undefined; link?: AccountLink | undefined }) {
+  assertMayGrant(req, input.roles)
+  const { org, local } = splitRoles(input.roles)
+  const madrasaId = activeMadrasaId()
   const email = input.email ? normaliseIdentifier(input.email) : null
   const username = input.username ? normaliseIdentifier(input.username) : null
   if (!email && !username) throw new AppError(422, 'VALIDATION_FAILED', 'Give an email or a username.')
@@ -64,14 +112,18 @@ export async function createUser(req: Request, input: { displayName: string; ema
   if (clash) throw conflict('USER_EXISTS', 'An account with this email or username already exists.')
   const user = await prisma.$transaction(async (tx) => {
     const u = await tx.user.create({
-      data: { displayName: input.displayName, email, username, phone: input.phone ?? null, status: 'INVITED', roles: { create: input.roles.map((role) => ({ role })) } },
+      data: {
+        displayName: input.displayName, email, username, phone: input.phone ?? null, status: 'INVITED', homeMadrasaId: madrasaId,
+        roles: { create: org.map((role) => ({ role })) },
+        memberships: { create: local.map((role) => ({ madrasaId, role, grantedById: req.auth!.user.id, expiresAt: input.expiresAt ?? null })) },
+      },
       select: publicUser,
     })
     if (input.link) {
       // Conditional update: a record that already has an account is never re-linked.
       const where = { id: input.link.id, userId: null }
       const n = input.link.kind === 'staff' ? await tx.staffProfile.updateMany({ where, data: { userId: u.id } })
-        : input.link.kind === 'guardian' ? await tx.guardian.updateMany({ where, data: { userId: u.id } })
+        : input.link.kind === 'guardian' ? await tx.guardian.updateMany({ where: { ...where, OR: [{ students: { some: { madrasaId } } }, { students: { none: {} } }] }, data: { userId: u.id } })
         : await tx.student.updateMany({ where, data: { userId: u.id } })
       if (n.count !== 1) throw conflict('LINK_UNAVAILABLE', 'That record does not exist or already has an account.')
     }
@@ -83,30 +135,42 @@ export async function createUser(req: Request, input: { displayName: string; ema
 }
 
 export async function resendInvite(req: Request, id: string) {
-  const user = await prisma.user.findUnique({ where: { id } })
-  if (!user) throw notFound()
+  const user = await visibleUser(req, id)
   if (user.status !== 'INVITED') throw conflict('NOT_INVITED', 'This account is already set up.')
   const invite = await deliverInvite(user)
   await audit({ action: 'user.invite_resent', summary: 'Invitation sent again', entityType: 'user', entityId: id }, req)
   return invite
 }
 
-async function assertNotLastAdmin(userId: string, tx: Prisma.TransactionClient) {
-  const others = await tx.user.count({ where: { id: { not: userId }, status: 'ACTIVE', roles: { some: { role: 'ADMIN' } } } })
-  if (others === 0) throw conflict('LAST_ADMIN', 'This is the only active administrator. Add another administrator first.')
+async function assertNotLastSuperAdmin(userId: string, tx: Tx) {
+  const others = await tx.user.count({ where: { id: { not: userId }, status: 'ACTIVE', roles: { some: { role: 'SUPER_ADMIN' } } } })
+  if (others === 0) throw conflict('LAST_ADMIN', 'This is the only active Super Admin. Add another Super Admin first.')
 }
 
-export async function setRoles(req: Request, id: string, roles: Role[]) {
+/**
+ * Replace the account's roles in the active madrasa (and its organization roles).
+ * Roles the account holds in other madrasas are not touched.
+ */
+export async function setRoles(req: Request, id: string, roles: Role[], expiresAt?: Date) {
+  assertMayGrant(req, roles)
+  const madrasaId = activeMadrasaId()
+  const { org, local } = splitRoles(roles)
   return prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({ where: { id }, include: { roles: true } })
-    if (!user) throw notFound()
-    const before = user.roles.map((r) => r.role)
-    if (before.includes('ADMIN') && !roles.includes('ADMIN')) {
+    const user = await visibleUser(req, id, tx)
+    const before = (await view(user)).roles
+    const hadSuper = user.roles.some((r) => r.role === 'SUPER_ADMIN')
+    if (hadSuper && !org.includes('SUPER_ADMIN')) {
+      if (!req.auth!.permissions.has('org.manage')) throw new AppError(403, 'FORBIDDEN', 'Only a Super Admin can remove organization-wide administration.')
       if (id === req.auth!.user.id) throw conflict('SELF_DEMOTION', 'You cannot remove your own administrator role.')
-      await assertNotLastAdmin(id, tx)
+      await assertNotLastSuperAdmin(id, tx)
     }
+    if (id === req.auth!.user.id && before.includes('MADRASA_ADMIN') && !local.includes('MADRASA_ADMIN') && !org.includes('SUPER_ADMIN')) throw conflict('SELF_DEMOTION', 'You cannot remove your own administrator role.')
     await tx.userRole.deleteMany({ where: { userId: id } })
-    await tx.userRole.createMany({ data: roles.map((role) => ({ userId: id, role })) })
+    await tx.userRole.createMany({ data: org.map((role) => ({ userId: id, role })) })
+    await tx.madrasaMembership.deleteMany({ where: { userId: id, madrasaId, role: { notIn: [...local] } } })
+    for (const role of local) {
+      await tx.madrasaMembership.upsert({ where: { userId_madrasaId_role: { userId: id, madrasaId, role } }, create: { userId: id, madrasaId, role, grantedById: req.auth!.user.id, expiresAt: expiresAt ?? null }, update: { active: true, ...(expiresAt !== undefined ? { expiresAt } : {}) } })
+    }
     // Permissions are read per request, but sign out so the new role's MFA policy applies at next sign-in.
     await revokeAllSessions(id, 'roles_changed', tx)
     await audit({ action: 'user.roles_changed', summary: `Roles changed from ${before.join(', ') || 'none'} to ${roles.join(', ')}`, entityType: 'user', entityId: id, metadata: { before, after: roles } }, req, tx)
@@ -114,20 +178,22 @@ export async function setRoles(req: Request, id: string, roles: Role[]) {
   })
 }
 
-const getUserTx = async (tx: Prisma.TransactionClient, id: string) => view(await tx.user.findUniqueOrThrow({ where: { id }, select: publicUser }))
+const getUserTx = async (tx: Tx, id: string) => view(await tx.user.findUniqueOrThrow({ where: { id }, select: publicUser }))
 
 export async function setStatus(req: Request, id: string, active: boolean) {
   return prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({ where: { id }, include: { roles: true } })
-    if (!user) throw notFound()
+    const user = await visibleUser(req, id, tx)
+    // Signing someone out of every madrasa is an organization decision when they work in others too.
+    if (user.memberships.some((m) => m.madrasaId !== activeMadrasaId()) && !req.auth!.permissions.has('org.manage')) throw new AppError(403, 'FORBIDDEN', 'This person also works in another madrasa. Ask a Super Admin, or remove their roles here instead.')
     if (!active) {
       if (id === req.auth!.user.id) throw conflict('SELF_DEACTIVATION', 'You cannot deactivate your own account.')
-      if (user.roles.some((r) => r.role === 'ADMIN')) await assertNotLastAdmin(id, tx)
+      if (user.roles.some((r) => r.role === 'SUPER_ADMIN')) await assertNotLastSuperAdmin(id, tx)
       await tx.user.update({ where: { id }, data: { status: 'DISABLED' } })
       await revokeAllSessions(id, 'account_disabled', tx)
     } else {
       if (user.status !== 'DISABLED') throw conflict('NOT_DISABLED', 'This account is not deactivated.')
-      await tx.user.update({ where: { id }, data: { status: user.passwordHash ? 'ACTIVE' : 'INVITED' } })
+      const { passwordHash } = await tx.user.findUniqueOrThrow({ where: { id }, select: { passwordHash: true } })
+      await tx.user.update({ where: { id }, data: { status: passwordHash ? 'ACTIVE' : 'INVITED' } })
     }
     await audit({ action: active ? 'user.activated' : 'user.deactivated', summary: active ? 'Account reactivated' : 'Account deactivated; all sessions signed out', entityType: 'user', entityId: id }, req, tx)
     return getUserTx(tx, id)
@@ -142,6 +208,7 @@ export async function setStatus(req: Request, id: string, active: boolean) {
  */
 export async function resetMfa(req: Request | null, id: string, reason: string, method: 'EMAIL_LINK' | 'IN_PERSON', actorOverride?: { name: string }) {
   if (req?.auth?.user.id === id) throw conflict('SELF_RESET', 'Use your own security settings to change your authenticator.')
+  if (req) await visibleUser(req, id)
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user || user.status === 'DISABLED') throw notFound()
   if (method === 'EMAIL_LINK' && (!user.email || !user.emailVerifiedAt)) {
@@ -190,7 +257,7 @@ export async function getMfaPolicy() {
 }
 
 /** Roles that must always use MFA. The policy can add roles to this list but never remove them. */
-export const MFA_BASELINE: readonly Role[] = ['ADMIN', 'PRINCIPAL', 'MENTOR']
+export const MFA_BASELINE: readonly Role[] = ['SUPER_ADMIN', 'MADRASA_ADMIN', 'PRINCIPAL', 'COMMITTEE_MEMBER', 'CA', 'ACCOUNTANT', 'MENTOR']
 
 export async function setMfaPolicy(req: Request, policy: { role: Role; required: boolean }[]) {
   const lowered = policy.filter((p) => !p.required && MFA_BASELINE.includes(p.role)).map((p) => p.role)
@@ -202,8 +269,11 @@ export async function setMfaPolicy(req: Request, policy: { role: Role; required:
   return getMfaPolicy()
 }
 
-export async function listAuditLogs(q: { page: number; pageSize: number; entityId?: string | undefined; action?: string | undefined }) {
-  const where: Prisma.AuditLogWhereInput = { ...(q.entityId ? { entityId: q.entityId } : {}), ...(q.action ? { action: { startsWith: q.action } } : {}) }
+/** The active madrasa's activity; organization administrators also see organization-level entries. */
+export async function listAuditLogs(req: Request, q: { page: number; pageSize: number; entityId?: string | undefined; action?: string | undefined }) {
+  const madrasaId = activeMadrasaId()
+  const here: Prisma.AuditLogWhereInput = req.auth!.permissions.has('org.manage') ? { OR: [{ madrasaId }, { madrasaId: null }] } : { madrasaId }
+  const where: Prisma.AuditLogWhereInput = { AND: [here, { ...(q.entityId ? { entityId: q.entityId } : {}), ...(q.action ? { action: { startsWith: q.action } } : {}) }] }
   const [total, items] = await Promise.all([
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({ where, orderBy: { at: 'desc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize, omit: { ip: true } }),

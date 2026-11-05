@@ -2,9 +2,9 @@ import { t } from "../../i18n/I18nProvider"
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Bell, X, LogOut, MoreHorizontal, ShieldCheck } from 'lucide-react'
+import { Bell, X, LogOut, MoreHorizontal, ShieldCheck, Building2 } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
-import { NAV, PAGE_TITLES } from '../../constants/navigation'
+import { NAV, PAGE_TITLES, visibleItems } from '../../constants/navigation'
 import { ROLE_LABELS } from '../../constants/labels'
 import { sessionUser, notificationsFor } from '../../services/selectors'
 import { Avatar, IconButton, Logo, cx } from '../ui'
@@ -30,10 +30,33 @@ function Brand({ compact }) {
   )
 }
 
+/**
+ * Which madrasa the app is working in. Shown only to people who work in (or have
+ * children in) more than one; switching reloads every screen for that madrasa.
+ */
+function MadrasaSwitcher({ className, full }) {
+  const auth = useAuth()
+  const list = auth.user?.madrasas ?? []
+  if (list.length < 2) return null
+  const current = auth.user?.madrasa?.id ?? ''
+  return (
+    <label className={cx('flex items-center gap-2', className)}>
+      <Building2 size={16} className="shrink-0 text-primary-600" aria-hidden />
+      <span className="sr-only">{t("Madrasa")}</span>
+      <select value={current} onChange={(e) => auth.switchMadrasa(e.target.value)}
+        className={cx('field h-10 min-h-0 py-0 text-[13.5px] font-semibold', full ? 'w-full' : 'max-w-[200px]')}>
+        {!current && <option value="">{t("All my children’s madrasas")}</option>}
+        {list.map((m) => <option key={m.id} value={m.id}>{m.shortName || m.name}</option>)}
+      </select>
+    </label>
+  )
+}
+
 function NavList({ role, onNavigate }) {
+  const auth = useAuth()
   return (
     <nav aria-label={t("Main")} className="space-y-5">
-      {NAV[role].sections.map((sec) => (
+      {NAV[role].sections.map((sec) => ({ ...sec, items: visibleItems(sec.items, auth) })).filter((sec) => sec.items.length).map((sec) => (
         <div key={sec.title}>
           <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted/80">{t(sec.title)}</p>
           <ul className="space-y-0.5">
@@ -105,6 +128,7 @@ export default function AppShell() {
             <div className="lg:hidden"><Brand compact /></div>
             <h2 className="hidden truncate text-[17px] font-bold lg:block">{t(title)}</h2>
             <div className="flex-1" />
+            <MadrasaSwitcher className="hidden md:flex" />
             <LanguageToggle className="hidden xs:inline-flex" />
             <IconButton icon={Bell} label={unread ? t("Notifications ({n} unread)", { n: unread }) : t("Notifications")} badge={unread || null} onClick={() => navigate('/notifications')} />
             <div className="relative">
@@ -149,7 +173,7 @@ export default function AppShell() {
       {/* Mobile bottom navigation */}
       <nav aria-label={t("Quick navigation")} className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-safe backdrop-blur-md lg:hidden">
         <ul className="mx-auto grid max-w-lg grid-cols-5">
-          {NAV[role].bottom.map((it) => (
+          {visibleItems(NAV[role].bottom, auth).map((it) => (
             <li key={it.to}>
               <NavLink to={it.to} end={it.to === '/sabaq'} className={({ isActive }) => cx('flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold transition', isActive ? 'text-primary-700' : 'text-ink-muted')}>
                 {({ isActive }) => it.primary ? (
@@ -187,6 +211,7 @@ export default function AppShell() {
                 <IconButton icon={X} label={t("Close menu")} onClick={() => setDrawer(false)} />
               </div>
               <div className="flex-1 overflow-y-auto px-3 py-4" data-lenis-prevent>
+                <MadrasaSwitcher full className="mb-5" />
                 <div className="mb-5"><p className="mb-1.5 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted/80">Language / زبان</p><LanguageToggle full className="flex w-full" /></div>
                 <Link to="/account/security" onClick={() => setDrawer(false)} className="mb-5 flex min-h-[44px] items-center gap-3 rounded-xl border border-line px-3 text-[14px] font-semibold text-ink-soft hover:bg-sage-100">
                   <ShieldCheck size={18} className="text-primary-600" aria-hidden /> {t("Account security")}

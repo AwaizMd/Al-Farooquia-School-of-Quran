@@ -7,6 +7,8 @@ import { audit } from '../audit-logs/audit.service.js'
 import { invoiceView } from '../fees/fees.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 import { guardiansOf, queueDelivery, render } from './notify.service.js'
+import { activeMadrasaId } from '../../tenancy/context.js'
+import { madrasaProfile } from '../../tenancy/settings.js'
 
 const INVOICE_INCLUDE = {
   plan: { select: { code: true, name: true } },
@@ -34,13 +36,13 @@ export async function setRules(req: Request, rules: { key: string; enabled: bool
 }
 
 export async function getTemplate() {
-  return prisma.messageTemplate.findUniqueOrThrow({ where: { key: 'fee_reminder' } })
+  return prisma.messageTemplate.findFirstOrThrow({ where: { key: 'fee_reminder' } })
 }
 
 export async function setTemplate(req: Request, t: { subject: string; body: string }) {
   const unknown = [...`${t.subject} ${t.body}`.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => !['guardian', 'student', 'madarsa', 'period', 'dueDate', 'balance'].includes(k!))
   if (unknown.length) throw new AppError(422, 'VALIDATION_FAILED', `Unknown placeholders: ${unknown.join(', ')}`, [{ path: 'body', message: `Unknown placeholders: ${unknown.map((u) => `{${u}}`).join(', ')}` }])
-  const saved = await prisma.messageTemplate.update({ where: { key: 'fee_reminder' }, data: t })
+  const saved = await prisma.messageTemplate.update({ where: { madrasaId_key: { madrasaId: activeMadrasaId(), key: 'fee_reminder' } }, data: t })
   await audit({ action: 'reminders.template_changed', summary: 'Fee reminder message edited', entityType: 'message_template' }, req)
   return saved
 }
@@ -50,10 +52,10 @@ async function queueForInvoice(invoiceId: string, stage: string, channels: Notif
   if (!inv || inv.status !== 'ISSUED' || inv.student.status !== 'ACTIVE') return 0
   const view = invoiceView(inv, today)
   if (view.balanceMinor === 0) return 0
-  const [template, settings] = await Promise.all([getTemplate(), prisma.institutionSettings.findUnique({ where: { id: 1 } })])
+  const [template, madrasa] = await Promise.all([getTemplate(), madrasaProfile()])
   let queued = 0
   for (const g of await guardiansOf(prisma, inv.studentId, { fees: true })) {
-    const vars = { guardian: g.name, student: inv.student.name, madarsa: settings?.brandName ?? 'the Madarsa', period: monthName(inv.period), dueDate: isoDate(inv.dueDate)!, balance: '{balance}' } // filled in with the live balance when the message is sent
+    const vars = { guardian: g.name, student: inv.student.name, madarsa: madrasa.name, period: monthName(inv.period), dueDate: isoDate(inv.dueDate)!, balance: '{balance}' } // filled in with the live balance when the message is sent
     for (const channel of channels) {
       if (channel === 'IN_APP' && !g.userId) continue
       const recipient = channel === 'EMAIL' ? g.email : channel === 'IN_APP' ? null : g.phone
@@ -79,6 +81,7 @@ export async function runReminders(today?: string) {
 
 /** Office "send a reminder now" for one invoice (at most once per day per channel). */
 export async function sendNow(req: Request, invoiceId: string) {
+  if (!(await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true } }))) throw notFound()
   const today = await institutionToday()
   const n = await queueForInvoice(invoiceId, `manual-${today}`, ['EMAIL', 'IN_APP'], today)
   await audit({ action: 'reminders.sent_manually', summary: n ? `${n} reminder(s) queued` : 'Nothing queued (already sent today, cleared, or no contact)', entityType: 'invoice', entityId: invoiceId }, req)

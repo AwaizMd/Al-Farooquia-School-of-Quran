@@ -1,9 +1,8 @@
 import { blobUrl, get, patch, post, put, del, upload } from './client'
 
-// Fee payment methods (Razorpay, bank transfer, UPI QR) and reported manual payments.
+// Fee payment methods (bank transfer, UPI QR) and payments reported by families.
 
 export const paymentOptions = (studentUuid) => get(`/payments/options?studentId=${studentUuid}`)
-export const upiQrUrl = () => blobUrl('/payments/upi-qr')
 
 export const uploadProof = (file) => upload('/payments/proofs', file, { method: 'POST' })
 export const submitManualPayment = (body) => post('/payments/submissions', body)
@@ -20,7 +19,6 @@ export const requestInfo = (id, message) => post(`/payments/submissions/${id}/re
 
 export const getPaymentSettings = () => get('/admin/payment-settings')
 export const savePaymentSettings = (body) => put('/admin/payment-settings', body)
-export const validateRazorpay = () => post('/admin/payment-settings/razorpay/validate', {})
 export const uploadUpiQr = (file) => upload('/admin/payment-settings/upi-qr', file)
 export const removeUpiQr = () => del('/admin/payment-settings/upi-qr')
 

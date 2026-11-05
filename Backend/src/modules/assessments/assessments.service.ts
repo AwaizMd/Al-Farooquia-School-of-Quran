@@ -3,7 +3,7 @@ import type { Prisma } from '../../generated/prisma/client.js'
 import type { Track } from '../../generated/prisma/enums.js'
 import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
 import { institutionToday } from '../../common/clock.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { academicScope, accessLevel, ACCESS_INCLUDE, taughtGroupsWhere } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { notifyStudentFamily } from '../notifications/notify.service.js'
@@ -23,7 +23,7 @@ export function gradeFor(pct: number, bands: Band[]) {
   return sorted.find((b) => pct >= b.minPercent) ?? sorted[sorted.length - 1]!
 }
 
-export async function activeScale(db: Prisma.TransactionClient | typeof prisma = prisma) {
+export async function activeScale(db: Tx | typeof prisma = prisma) {
   const s = await db.gradingScale.findFirst({ where: { active: true }, include: { bands: true } })
   if (!s) throw new AppError(500, 'NO_GRADING_SCALE', 'No grading scale is configured.')
   return s
@@ -94,7 +94,7 @@ export async function createExam(req: Request, input: ExamInput) {
   if (groups.length !== input.groupIds.length) throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'groupIds', message: 'Choose valid halqas.' }])
   if (groups.some((g) => g.track !== input.track)) throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'groupIds', message: 'All halqas must follow the exam’s track.' }])
   const manage = auth.permissions.has('exams.manage')
-  const ownStaff = await prisma.staffProfile.findUnique({ where: { userId: auth.user.id } })
+  const ownStaff = await prisma.staffProfile.findFirst({ where: { userId: auth.user.id } })
   // Mentors may schedule tests for the halqas they teach.
   if (!manage && !(ownStaff && groups.every((g) => g.mentors.some((m) => m.staffId === ownStaff.id)))) throw forbidden('You can schedule tests only for your own halqas.')
   const subjects = input.subjects?.length ? input.subjects : DEFAULT_SUBJECTS[input.track]
@@ -124,7 +124,7 @@ export async function saveResults(req: Request, examRef: string, entries: Result
   const exam = await findExam(req, examRef)
   if (exam.status === 'CANCELLED') throw conflict('EXAM_CANCELLED', 'This exam was cancelled.')
   const manage = auth.permissions.has('exams.manage')
-  const ownStaff = await prisma.staffProfile.findUnique({ where: { userId: auth.user.id } })
+  const ownStaff = await prisma.staffProfile.findFirst({ where: { userId: auth.user.id } })
   const isExaminer = !!ownStaff && exam.examinerId === ownStaff.id
   // A mentor who is not the examiner may enter marks only for the halqas they teach,
   // even when the exam also covers other halqas.

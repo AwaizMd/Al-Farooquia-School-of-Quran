@@ -1,6 +1,5 @@
 import { t } from "../../i18n/I18nProvider"
-import { Link } from 'react-router-dom'
-import { Sun, Target, CalendarClock, MessageSquareQuote, Library, CalendarCheck, Sprout, ChevronRight, BookOpen } from 'lucide-react'
+import { Sun, Target, CalendarClock, MessageSquareQuote, CalendarCheck, Sprout, BookOpen } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
 import { useActiveChild } from '../../hooks/useScope'
 import { Card, CardHeader, Button, ProgressRing, Badge, StarMotif, FadeIn } from '../../components/ui'
@@ -22,7 +21,6 @@ export default function StudentDashboard() {
   const exam = state.exams.filter((e) => e.groupIds.includes(me.groupId) && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0]
   const todayStatus = state.attendance[latestSchoolDay(idx, today)]?.[me.id]
   const praise = recs.find((r) => r.performance >= 4 && r.comments)
-  const resources = state.library.filter((r) => r.access === 'All students' || (r.access === 'Hifz groups' && me.track === 'hifz') || (r.access === 'Alimiyyah' && me.track === 'alim')).slice(0, 3)
 
   const schedule = me.track === 'hifz'
     ? [['After Fajr', 'Sabaq — new lesson'], ['8:30 am', 'Sabqi — recent revision'], ['10:30 am', 'Manzil — older portions'], ['After Asr', 'Self-revision of tomorrow\'s Sabaq']]
@@ -107,20 +105,6 @@ export default function StudentDashboard() {
               </div>
             ) : <p className="text-[13.5px] text-ink-muted">{t("No assessment scheduled.")}</p>}
           </div>
-        </Card>
-
-        <Card>
-          <CardHeader title={t("Study resources")} icon={Library} action={<Button size="sm" variant="ghost" to="/library">{t("Library")}</Button>} />
-          <ul className="mt-2 divide-y divide-line">
-            {resources.map((r) => (
-              <li key={r.id}>
-                <Link to={`/library?open=${r.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-ivory-50 sm:px-5">
-                  <span className="min-w-0 flex-1"><span className="block truncate text-[13.5px] font-semibold text-forest">{r.title}</span><span className="text-[12px] text-ink-muted">{r.category} · {r.type}</span></span>
-                  <ChevronRight size={16} className="text-ink-muted/60" />
-                </Link>
-              </li>
-            ))}
-          </ul>
         </Card>
       </div>
 

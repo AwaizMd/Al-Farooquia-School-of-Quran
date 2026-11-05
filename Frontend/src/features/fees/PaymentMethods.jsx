@@ -1,9 +1,10 @@
 import { t } from '../../i18n/I18nProvider'
 import { useEffect, useState } from 'react'
-import { Copy, CreditCard, Landmark, QrCode, Smartphone, Upload, Clock, ShieldAlert, MessageSquareReply, RotateCcw, Receipt as ReceiptIcon } from 'lucide-react'
+import { Copy, Landmark, QrCode, Smartphone, Upload, Clock, ShieldAlert, MessageSquareReply, RotateCcw, Receipt as ReceiptIcon } from 'lucide-react'
 import { useToast } from '../../context/ToastContext'
 import { Badge, Button, Card, CardHeader, Input, Modal, Notice, Textarea, cx } from '../../components/ui'
-import { MANUAL_METHOD, SUBMISSION_STATUS, listSubmissions, respondToSubmission, submitManualPayment, toMinor, upiQrUrl, uploadProof } from '../../api/payments'
+import { MANUAL_METHOD, SUBMISSION_STATUS, listSubmissions, respondToSubmission, submitManualPayment, toMinor, uploadProof } from '../../api/payments'
+import { blobUrl } from '../../api/client'
 import { money } from '../../utils/format'
 import { fmtDate, todayISO } from '../../utils/date'
 
@@ -12,7 +13,6 @@ const PROOF_ACCEPT = 'application/pdf,image/png,image/jpeg,image/webp'
 /** The payment methods the Madarsa offers, as radio cards. Disabled methods are never shown. */
 export function MethodCards({ options, value, onChange }) {
   const cards = [
-    options?.online && { value: 'online', icon: CreditCard, title: 'Pay Online', text: 'UPI, card or net banking on the secure payment page. Confirmed automatically.' },
     options?.bank && { value: 'bank', icon: Landmark, title: 'Bank Transfer', text: 'Transfer from your bank, then send us the UTR. Confirmed by the office.' },
     options?.upi && { value: 'upi', icon: QrCode, title: 'Pay Using UPI QR', text: 'Scan the Madarsa’s QR code with any UPI app, then send us the reference.' },
   ].filter(Boolean)
@@ -78,9 +78,10 @@ export function UpiPanel({ upi, amountMinor }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let url
-    upiQrUrl().then((u) => { url = u; setSrc(u) }, () => setFailed(true))
+    // The QR of the student's own madrasa (the server picks it from the student).
+    blobUrl(upi.qr).then((u) => { url = u; setSrc(u) }, () => setFailed(true))
     return () => url && URL.revokeObjectURL(url)
-  }, [])
+  }, [upi.qr])
   // upi://pay is a convenience only: not every UPI app honours it, so the QR stays the main way.
   const deepLink = upi.upiId && amountMinor ? `upi://pay?${new URLSearchParams({ pa: upi.upiId, ...(upi.payeeName ? { pn: upi.payeeName } : {}), am: (amountMinor / 100).toFixed(2), cu: 'INR' })}` : null
   return (
@@ -232,6 +233,6 @@ function ReplyModal({ submission, onClose, onDone }) {
 }
 
 export function NoMethodsNotice() {
-  return <Notice tone="gold" icon={ShieldAlert}>{t('The Madarsa has not set up a way to pay fees online yet. Please contact the Madarsa office to pay.')}</Notice>
+  return <Notice tone="gold" icon={ShieldAlert}>{t('The madrasa has not set up bank transfer or UPI payments yet. Please contact the madrasa office to pay.')}</Notice>
 }
 

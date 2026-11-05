@@ -9,7 +9,6 @@ import { prisma } from '../../database/prisma.js'
 import { JOBS, jobOverview, runTracked } from '../../jobs/registry.js'
 import * as reports from '../scheduled-reports/reports.service.js'
 import * as reminders from './reminders.service.js'
-import { audit } from '../audit-logs/audit.service.js'
 
 export const notificationsRouter = Router()
 const T = 'Notifications'
@@ -95,23 +94,4 @@ notificationsRouter.get('/reminders/log', requirePermission('fees.read'), async 
   const invoices = await prisma.invoice.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.invoiceId!))] } }, select: { id: true, student: { select: { admissionNo: true, name: true } } } })
   const byId = new Map(invoices.map((i) => [i.id, i.student]))
   res.json({ items: rows.map((r) => ({ id: r.id, student: byId.get(r.invoiceId!) ?? null, stage: r.dedupeKey.split(':')[2], channel: r.channel, status: r.status, lastError: r.lastError, recipient: r.recipient, createdAt: r.createdAt, sentAt: r.sentAt })) })
-})
-
-// ---------- Institution settings ----------
-
-const Settings = z.object({
-  brandName: z.string().trim().min(3).max(120), shortName: z.string().trim().min(2).max(60), brandArabic: z.string().trim().max(120), tagline: z.string().trim().max(120),
-  address: z.string().trim().max(300), phone: z.string().trim().max(40), email: z.string().trim().email(), currency: z.enum(['INR', 'PKR', 'BDT', 'GBP', 'USD', 'AED']),
-  weeklyOff: z.number().int().min(0).max(6), feeDueDay: z.number().int().min(1).max(28),
-}).partial()
-doc('get', '/settings', 'Administration', 'Institution settings')
-notificationsRouter.get('/settings', requireAuth, async (_req, res) => {
-  res.json(await prisma.institutionSettings.findUniqueOrThrow({ where: { id: 1 } }))
-})
-doc('put', '/settings', 'Administration', 'Change institution settings', { body: Settings, auth: 'settings.manage' })
-notificationsRouter.put('/settings', requirePermission('settings.manage'), async (req, res) => {
-  const patch = body(req, Settings)
-  const saved = await prisma.institutionSettings.update({ where: { id: 1 }, data: patch })
-  await audit({ action: 'settings.updated', summary: `Settings updated: ${Object.keys(patch).join(', ')}`, entityType: 'institution_settings' }, req)
-  res.json(saved)
 })

@@ -1,3 +1,5 @@
+import { activeMadrasaId } from '../../tenancy/context.js'
+import { lockRow } from '../../tenancy/locks.js'
 import type { Request } from 'express'
 import type { Prisma } from '../../generated/prisma/client.js'
 import type { StaffStatus } from '../../generated/prisma/enums.js'
@@ -49,7 +51,7 @@ export async function listStaff(req: Request) {
     return { items: rows.map(fullStaff) }
   }
   const scope = studentScope(req.auth!)
-  const own = await prisma.staffProfile.findUnique({ where: { userId: req.auth!.user.id }, include })
+  const own = await prisma.staffProfile.findFirst({ where: { userId: req.auth!.user.id }, include })
   const rows = scope ? await prisma.staffProfile.findMany({ where: { assignments: { some: { endedAt: null, group: { students: { some: scope } } } } }, include, orderBy: { code: 'asc' } }) : []
   const items = rows.filter((s) => s.id !== own?.id).map((s) => ({ id: s.id, code: s.code, displayName: s.displayName, title: s.title, status: s.status, groups: s.assignments.map((a) => ({ id: a.group.id, code: a.group.code, name: a.group.name })) }))
   return { items: own ? [fullStaff(own), ...items] : items }
@@ -96,11 +98,12 @@ export async function setStaffStatus(req: Request, id: string, status: StaffStat
 export async function assignMentor(req: Request, groupId: string, staffId: string) {
   await prisma.$transaction(async (tx) => {
     // Serialise concurrent reassignments of the same halqa.
-    await tx.$queryRaw`SELECT id FROM groups WHERE id = ${groupId}::uuid FOR UPDATE`
+    if (!(await lockRow(tx, 'groups', groupId))) throw notFound()
     const group = await tx.group.findUnique({ where: { id: groupId }, include: openMentor })
     if (!group) throw notFound()
     const staff = await tx.staffProfile.findUnique({ where: { id: staffId } })
-    if (!staff || staff.status !== 'ACTIVE') throw conflict('STAFF_INACTIVE', 'Choose an active staff member.')
+    if (!staff) throw notFound()
+    if (staff.status !== 'ACTIVE') throw conflict('STAFF_INACTIVE', 'Choose an active staff member.')
     const current = group.mentors[0]
     if (current?.staffId === staffId) return
     if (current) await tx.groupMentorAssignment.update({ where: { id: current.id }, data: { endedAt: new Date() } })
@@ -111,11 +114,14 @@ export async function assignMentor(req: Request, groupId: string, staffId: strin
   return listGroups(req)
 }
 
+/** Guardians of the active madrasa's students (a guardian's children in other madrasas are not shown). */
 export async function listGuardians(q: { search?: string | undefined; page: number; pageSize: number }) {
-  const where: Prisma.GuardianWhereInput = q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { phone: { contains: q.search } }, { code: { contains: q.search, mode: 'insensitive' } }] } : {}
+  const madrasaId = activeMadrasaId()
+  const here = { students: { some: { madrasaId } } } satisfies Prisma.GuardianWhereInput
+  const where: Prisma.GuardianWhereInput = q.search ? { AND: [here, { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { phone: { contains: q.search } }, { code: { contains: q.search, mode: 'insensitive' } }] }] } : here
   const [total, rows] = await Promise.all([
     prisma.guardian.count({ where }),
-    prisma.guardian.findMany({ where, include: { students: { include: { student: { select: { admissionNo: true, name: true } } } } }, orderBy: { name: 'asc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
+    prisma.guardian.findMany({ where, include: { students: { where: { madrasaId }, include: { student: { select: { admissionNo: true, name: true } } } } }, orderBy: { name: 'asc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
   ])
   return {
     total, page: q.page, pageSize: q.pageSize,

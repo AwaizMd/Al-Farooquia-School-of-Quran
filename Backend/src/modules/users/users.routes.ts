@@ -19,14 +19,16 @@ const CreateUser = z
     email: z.string().trim().email().max(254).optional(),
     username: z.string().trim().regex(/^[A-Za-z0-9._-]{3,40}$/, 'Use 3–40 letters, numbers, dots, dashes or underscores.').optional(),
     phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/).optional(),
-    roles: z.array(RoleEnum).min(1).max(6),
+    roles: z.array(RoleEnum).min(1).max(10),
+    /** For time-bound access (e.g. a CA engaged for one audit). */
+    expiresAt: z.coerce.date().min(new Date(0)).optional(),
     link: z.object({ kind: z.enum(['staff', 'guardian', 'student']), id: z.string().uuid() }).optional(),
   })
   .refine((v) => v.email || v.username, { message: 'Give an email or a username.', path: ['email'] })
-const SetRoles = z.object({ roles: z.array(RoleEnum).min(1).max(6) })
+const SetRoles = z.object({ roles: z.array(RoleEnum).min(1).max(10), expiresAt: z.coerce.date().optional() })
 const SetStatus = z.object({ active: z.boolean() })
 const ResetMfa = z.object({ reason: z.string().trim().min(5).max(500), method: z.enum(['EMAIL_LINK', 'IN_PERSON']) })
-const Policy = z.object({ policy: z.array(z.object({ role: RoleEnum, required: z.boolean() })).min(1).max(6) })
+const Policy = z.object({ policy: z.array(z.object({ role: RoleEnum, required: z.boolean() })).min(1).max(10) })
 const AuditQuery = z.object({ entityId: z.string().max(64).optional(), action: z.string().max(64).optional(), ...Page })
 
 const uniq = <T>(xs: T[]) => [...new Set(xs)]
@@ -38,7 +40,7 @@ adminRouter.get('/users', requirePermission('users.read'), async (req, res) => {
 
 doc('get', '/admin/users/:id', T, 'Get one account', { auth: 'users.read' })
 adminRouter.get('/users/:id', requirePermission('users.read'), async (req, res) => {
-  res.json(await users.getUser(IdParam.parse(req.params).id))
+  res.json(await users.getUser(req, IdParam.parse(req.params).id))
 })
 
 doc('post', '/admin/users', T, 'Create an account and send its invitation', { body: CreateUser, auth: 'users.manage + recent re-authentication' })
@@ -54,9 +56,10 @@ adminRouter.post('/users/:id/invite', requirePermission('users.manage'), async (
   res.json(await users.resendInvite(req, IdParam.parse(req.params).id))
 })
 
-doc('put', '/admin/users/:id/roles', T, 'Replace an account’s roles', { body: SetRoles, auth: 'users.manage + recent re-authentication' })
+doc('put', '/admin/users/:id/roles', T, 'Replace an account’s roles in the active madrasa', { body: SetRoles, auth: 'users.manage + recent re-authentication' })
 adminRouter.put('/users/:id/roles', requirePermission('users.manage'), requireRecentAuth(), async (req, res) => {
-  res.json(await users.setRoles(req, IdParam.parse(req.params).id, uniq(body(req, SetRoles).roles)))
+  const input = body(req, SetRoles)
+  res.json(await users.setRoles(req, IdParam.parse(req.params).id, uniq(input.roles), input.expiresAt))
 })
 
 doc('post', '/admin/users/:id/status', T, 'Activate or deactivate an account', { body: SetStatus, auth: 'users.manage + recent re-authentication' })
@@ -83,5 +86,5 @@ adminRouter.put('/security/mfa-policy', requirePermission('security.manage'), re
 
 doc('get', '/admin/audit-logs', T, 'Activity log', { query: AuditQuery, auth: 'audit.read' })
 adminRouter.get('/audit-logs', requirePermission('audit.read'), async (req, res) => {
-  res.json(await users.listAuditLogs(query(req, AuditQuery)))
+  res.json(await users.listAuditLogs(req, query(req, AuditQuery)))
 })

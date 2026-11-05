@@ -26,7 +26,6 @@ import Reminders from '../pages/admin/Reminders'
 import PaymentSettings from '../pages/admin/PaymentSettings'
 import PaymentVerification from '../pages/admin/PaymentVerification'
 import Hostel from '../pages/admin/Hostel'
-import Library from '../pages/shared/Library'
 import Reports from '../pages/admin/Reports'
 import Audit from '../pages/admin/Audit'
 import Notifications from '../pages/shared/Notifications'
@@ -37,6 +36,7 @@ import { AcceptInvite, ForgotPassword, MfaRecovery, ResetPassword } from '../pag
 import InterimHome from '../pages/auth/InterimHome'
 import Users from '../pages/admin/Users'
 import Security from '../pages/account/Security'
+import Organization from '../pages/org/Organization'
 
 const Loading = () => <div className="flex min-h-dvh items-center justify-center bg-ivory" aria-busy="true"><span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-r-transparent" /></div>
 
@@ -73,10 +73,12 @@ function PublicOnly({ children }) {
   return children
 }
 
-function Gate({ path, roles, children }) {
+function Gate({ path, roles, perm, children }) {
   const { state } = useStore()
+  const auth = useAuth()
   const allowed = roles || ROUTE_ROLES[path]
   if (allowed && !allowed.includes(state.session.persona || state.session.role)) return <Forbidden />
+  if (perm && !auth.can(perm)) return <Forbidden />
   return children
 }
 
@@ -113,12 +115,12 @@ export default function AppRoutes() {
         <Route path="/payment-settings" element={<Gate path="/payment-settings"><PaymentSettings /></Gate>} />
         <Route path="/payment-verification" element={<Gate path="/payment-verification"><PaymentVerification /></Gate>} />
         <Route path="/hostel" element={<Gate path="/hostel"><Hostel /></Gate>} />
-        <Route path="/library" element={<Gate path="/library"><Library /></Gate>} />
         <Route path="/reports" element={<Gate path="/reports"><Reports /></Gate>} />
         <Route path="/audit" element={<Gate path="/audit"><Audit /></Gate>} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Gate path="/settings"><Settings /></Gate>} />
         <Route path="/admin/users" element={<Gate path="/admin/users"><Users /></Gate>} />
+        <Route path="/organization" element={<Gate path="/organization" perm="org.manage"><Organization /></Gate>} />
         <Route path="/account/security" element={<Security />} />
         <Route path="*" element={<NotFound />} />
       </Route>

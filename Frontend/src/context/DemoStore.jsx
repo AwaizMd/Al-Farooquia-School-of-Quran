@@ -19,7 +19,7 @@ export function emptyState() {
     attendance: {}, hostelAttendance: {}, sabaq: [],
     invoices: [], payments: [],
     exams: [], results: [], grading: [],
-    rooms: [], beds: [], library: [],
+    rooms: [], beds: [],
     notifications: [], audit: [],
     // Kept for selectors that still read them; reminders now live on the server.
     reminderSchedule: [], reminderTemplate: '', reminderLog: [],
@@ -48,7 +48,7 @@ function reducer(state, a) {
       // Server notifications belong to the signed-in account; address them to its view.
       return { ...state, settings: { ...state.settings, ...a.settings }, notifications: a.notifications.map((n) => ({ ...n, audience: [{ role: state.session?.role, id: state.session?.userId }] })) }
     case 'HYDRATE_CAMPUS':
-      return { ...state, library: a.library, rooms: a.rooms, beds: a.beds, hostelAttendance: a.hostelAttendance }
+      return { ...state, rooms: a.rooms, beds: a.beds, hostelAttendance: a.hostelAttendance }
     case 'HYDRATE_AUDIT':
       return { ...state, audit: a.audit }
     case 'UPDATE_SETTINGS':

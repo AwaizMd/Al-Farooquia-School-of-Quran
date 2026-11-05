@@ -1,4 +1,4 @@
-// Create the first administrator and print a one-time setup link.
+// Create the first Super Admin (organization administrator) and print a one-time setup link.
 //   node dist/cli/create-admin.js --email office@example.org --name "Office Administrator"
 // (development: npx tsx src/cli/create-admin.ts ...)
 import { parseArgs } from 'node:util'
@@ -14,7 +14,7 @@ if (!email || !/^\S+@\S+\.\S+$/.test(email) || !values.name || values.name.trim(
   process.exit(1)
 }
 const existing = await prisma.user.findUnique({ where: { email } })
-const user = existing ?? (await prisma.user.create({ data: { email, displayName: values.name.trim(), status: 'INVITED', roles: { create: [{ role: 'ADMIN' }] } } }))
+const user = existing ?? (await prisma.user.create({ data: { email, displayName: values.name.trim(), status: 'INVITED', roles: { create: [{ role: 'SUPER_ADMIN' }] } } }))
 if (existing && existing.status !== 'INVITED') {
   console.error('That account already exists and is set up. Use "Reset two-step verification" or the break-glass script instead.')
   process.exit(1)

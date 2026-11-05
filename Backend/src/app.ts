@@ -10,6 +10,7 @@ import { logger } from './common/logger.js'
 import { buildOpenApiDocument } from './docs/openapi.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { csrfProtection, loadSession } from './middleware/auth.js'
+import { requireFeature, resolveMadrasa } from './tenancy/access.js'
 import { rejectNulBytes } from './middleware/validate.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { healthRouter } from './modules/health/health.routes.js'
@@ -17,12 +18,13 @@ import { adminRouter } from './modules/users/users.routes.js'
 import { peopleRouter } from './modules/students/students.routes.js'
 import { learningRouter } from './modules/learning/learning.routes.js'
 import { assessmentsRouter } from './modules/assessments/assessments.routes.js'
-import { feesRouter, webhookRouter } from './modules/fees/fees.routes.js'
+import { feesRouter } from './modules/fees/fees.routes.js'
 import { notificationsRouter } from './modules/notifications/notifications.routes.js'
 import { campusRouter } from './modules/hostel/campus.routes.js'
 import { auditRouter } from './modules/audit-logs/audit.routes.js'
 import { paymentSettingsRouter } from './modules/payment-settings/settings.routes.js'
 import { manualPaymentsRouter } from './modules/fees/manual.routes.js'
+import { orgRouter } from './modules/organization/org.routes.js'
 
 export function createApp() {
   const app = express()
@@ -48,12 +50,10 @@ export function createApp() {
       origin: (origin, cb) => cb(null, !origin || env.CORS_ORIGINS.includes(origin)),
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
+      allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Request-Id', 'X-Madrasa-Id', 'X-File-Name'],
       maxAge: 600,
     }),
   )
-  // Gateway callbacks need the raw body for signature checks, and carry no session.
-  app.use('/api/v1', webhookRouter)
   app.use(express.json({ limit: '100kb' }))
   app.use(cookieParser())
 
@@ -65,7 +65,13 @@ export function createApp() {
   })
   api.use('/health', healthRouter)
   api.use(rejectNulBytes)
-  api.use(loadSession, csrfProtection)
+  // Fully signed-in requests then run inside their active madrasa (src/tenancy).
+  api.use(loadSession, csrfProtection, resolveMadrasa)
+  // Modules a madrasa can switch off are refused by the API, not only hidden in the menu.
+  api.use(['/fees', '/payments', '/admin/payment-settings', '/reminders'], requireFeature('FEES'))
+  api.use(['/exams', '/exam-results', '/grading', '/report-cards'], requireFeature('ASSESSMENTS'))
+  api.use('/scheduled-reports', requireFeature('SCHEDULED_REPORTS'))
+  api.use('/hostel', requireFeature('HOSTEL'))
   api.use('/auth', authRouter)
   api.use('/admin', adminRouter)
   api.use(peopleRouter)
@@ -77,6 +83,7 @@ export function createApp() {
   api.use(notificationsRouter)
   api.use(campusRouter)
   api.use(auditRouter)
+  api.use(orgRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

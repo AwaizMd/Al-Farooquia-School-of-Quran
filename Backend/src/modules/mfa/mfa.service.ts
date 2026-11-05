@@ -1,13 +1,12 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import QRCode from 'qrcode'
-import type { Prisma } from '../../generated/prisma/client.js'
 import type { Role } from '../../generated/prisma/enums.js'
 import { hashToken, seal, unseal } from '../../common/crypto.js'
 import { AppError } from '../../common/errors.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { generateSecret, matchStep, otpauthUrl } from './totp.js'
 
-type Db = Prisma.TransactionClient | typeof prisma
+type Db = Tx | typeof prisma
 
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000
 const RECOVERY_CODE_COUNT = 10

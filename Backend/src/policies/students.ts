@@ -1,4 +1,7 @@
 import type { Prisma } from '../generated/prisma/client.js'
+import { notFound } from '../common/errors.js'
+import { prisma } from '../database/prisma.js'
+import { withMadrasa } from '../tenancy/context.js'
 import type { AuthContext } from '../types/express.js'
 
 /**
@@ -52,4 +55,15 @@ export function accessLevel(auth: AuthContext, s: WithAccess): AccessLevel | nul
   if (auth.roles.includes('MENTOR') && s.group.mentors.some((m) => m.staff.userId === userId)) levels.push('teaching')
   if (auth.roles.includes('WARDEN') && s.hostelResident && s.status === 'ACTIVE') levels.push('hostel')
   return levels.sort((a, b) => RANK[b] - RANK[a])[0] ?? null
+}
+
+/**
+ * Run `fn` in the madrasa of a student the caller can reach (e.g. a parent paying
+ * for a child, whose madrasa may differ from the one selected in the app). The
+ * student is looked up through the caller's own scope, so another madrasa's id is 404.
+ */
+export async function inStudentMadrasa<T>(studentId: string, fn: () => Promise<T>): Promise<T> {
+  const s = await prisma.student.findUnique({ where: { id: studentId }, select: { madrasaId: true } })
+  if (!s) throw notFound()
+  return withMadrasa(s.madrasaId, fn)
 }

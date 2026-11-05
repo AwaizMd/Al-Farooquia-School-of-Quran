@@ -6,7 +6,7 @@ This guide covers one production server running everything directly on the host:
 
 ## 1. Server prerequisites
 
-- Ubuntu 24.04 LTS (or similar), with 2 vCPU and 4 GB RAM. That's plenty for one Madarsa.
+- Ubuntu 24.04 LTS (or similar), with 2 vCPU and 4 GB RAM. That's plenty for an organization with a few madrasas.
 - Node.js 22.12 or newer, PostgreSQL 17 (from the PGDG apt repository) and Caddy 2 (from its apt repository).
 - A domain name pointing at the server. Only ports 80 and 443 should be open; PostgreSQL listens on localhost only.
 
@@ -30,8 +30,6 @@ Create `/etc/madarsa/env` with owner root, group madarsa and mode 640. Never com
 | `TOKEN_HMAC_KEY` | 32 random bytes, base64 |
 | `MFA_ENCRYPTION_KEYS` / `MFA_ACTIVE_KEY_VERSION` | `1:<32 random bytes, base64>` / `1` |
 | `MAIL_TRANSPORT` / `SMTP_URL` / `MAIL_FROM` | `smtp` and your provider's SMTP URL |
-| `PAYMENT_PROVIDER` | `none`: payment methods and Razorpay keys are set by an administrator in Fee Payment Settings (see [PAYMENTS.md](PAYMENTS.md)). Use `razorpay` plus the three `RAZORPAY_*` values only if the keys should live in this file instead |
-| `SETTINGS_ENCRYPTION_KEYS` / `SETTINGS_ACTIVE_KEY_VERSION` | `1:<32 random bytes, base64>` / `1`. Seals the Razorpay secrets entered in the app |
 | `STORAGE_DRIVER` / `STORAGE_DIR` | `local` and `/srv/madarsa/storage`, or `s3` with the `S3_*` values |
 | `API_DOCS_ENABLED` | `false` |
 
@@ -41,7 +39,7 @@ Generate secrets with:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-The API refuses to start with unsafe production settings: insecure cookies, no CORS origins, file-based email, or the development payment gateway.
+The API refuses to start with unsafe production settings: insecure cookies, no CORS origins, or file-based email. There is no payment gateway to configure: each madrasa enters its own bank account and UPI QR code in the app.
 
 ## 3. First deployment
 
@@ -77,16 +75,17 @@ sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
 The worker (pg-boss) creates its tables in the `pgboss` schema on first start.
 
-### The first administrator
+### The organization and the first Super Admin
 
-There is no public sign-up. Create the first administrator once, on the server:
+There is no public sign-up. Once, on the server, create the organization and its first madrasa (code MAIN, with default halqas and fee plans; rename them in the app), then the first Super Admin:
 
 ```bash
 cd /srv/madarsa/app/Backend
+sudo -u madarsa bash -c 'set -a; . /etc/madarsa/env; npx tsx prisma/setup.ts'
 sudo -u madarsa bash -c 'set -a; . /etc/madarsa/env; node dist/cli/create-admin.js --email office@your-domain --name "Office Administrator"'
 ```
 
-The command prints a one-time setup link, valid for 72 hours. The administrator uses it to set a password, then sets up an authenticator at first sign-in. Invite everyone else from **Users & Access**.
+The command prints a one-time setup link, valid for 72 hours. The administrator uses it to set a password, then sets up an authenticator at first sign-in. Add more madrasas from **Madrasas**, and invite everyone else from **Users & Access** in the madrasa they work in.
 
 ## 4. Updating
 
@@ -109,7 +108,7 @@ Back up three things, and store them **separately**:
    sudo -u postgres pg_dump -Fc madarsa > /var/backups/madarsa-$(date +%F).dump
    ```
 2. **Uploaded files:** `/srv/madarsa/storage`, or the S3 bucket's versioning and replication.
-3. **Secrets:** `/etc/madarsa/env`. Store it away from the database dumps, because `MFA_ENCRYPTION_KEYS` and `SETTINGS_ENCRYPTION_KEYS` must never sit next to the data they protect. Uploaded proofs of payment and the UPI QR code are in the storage folder or bucket (item 2).
+3. **Secrets:** `/etc/madarsa/env`. Store it away from the database dumps, because `MFA_ENCRYPTION_KEYS` must never sit next to the data it protects. Uploaded proofs of payment and the UPI QR code are in the storage folder or bucket (item 2).
 
 To restore, create a fresh database and load the latest dump into it:
 
@@ -124,15 +123,14 @@ Test a restore on a separate machine at least once a term.
 | Secret | How | Effect |
 |---|---|---|
 | `TOKEN_HMAC_KEY` | Replace it and restart the API and the worker | Everyone is signed out. Outstanding invitation, reset and recovery links and **recovery codes** stop working; users can generate new codes in Account security |
-| `SETTINGS_ENCRYPTION_KEYS` | Add `2:<new key>`, set `SETTINGS_ACTIVE_KEY_VERSION=2`, restart, then re-enter the Razorpay secrets in Fee Payment Settings | Secrets saved afterwards use key 2. Keep key 1 until they have been re-entered |
 | `MFA_ENCRYPTION_KEYS` | Add `2:<new key>` to the list, set `MFA_ACTIVE_KEY_VERSION=2` and restart | New and re-enrolled authenticators use key 2. Keep key 1 until every user has re-enrolled, then remove it |
 | Database passwords | Run `ALTER ROLE ... PASSWORD`, update `/etc/madarsa/env` and restart | None |
-| `RAZORPAY_*`, `SMTP_URL`, `S3_*` | Rotate in the provider dashboard, update `/etc/madarsa/env` and restart | None |
+| `SMTP_URL`, `S3_*` | Rotate in the provider dashboard, update `/etc/madarsa/env` and restart | None |
 
 ## 7. External providers
 
 - **Email (required):** use any SMTP provider (Amazon SES, Zoho, Brevo, Postmark…). Set `MAIL_TRANSPORT=smtp`, `SMTP_URL` and `MAIL_FROM`, and configure SPF and DKIM for the sending domain.
-- **Fee payments (Razorpay, bank transfer, UPI QR):** configured in the app, not here. Follow [PAYMENTS.md](PAYMENTS.md#setting-up). Test Razorpay in **test mode** first: the adapter has not yet been run against a live Razorpay account.
+- **Fee payments (bank transfer, UPI QR):** configured per madrasa in the app, not here. Follow [PAYMENTS.md](PAYMENTS.md#setting-up-per-madrasa). There is no payment gateway.
 - **WhatsApp / SMS:** not connected yet. Messages for these channels are recorded as skipped.
   - WhatsApp needs a Business account and approved message templates.
   - SMS in India needs DLT registration.

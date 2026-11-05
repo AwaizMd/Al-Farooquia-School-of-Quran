@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { addDaysIso, institutionToday } from '../../src/common/clock.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, client, makeUser, type Client } from '../helpers/auth.js'
@@ -128,7 +128,7 @@ describe('verifying', () => {
 
   it('concurrent approvals of one submission apply it exactly once', async () => {
     const s = await submitted()
-    const admin2 = await makeUser({ email: 'admin2@x.test', roles: ['ADMIN'] }).then(() => as('admin2@x.test'))
+    const admin2 = await makeUser({ email: 'admin2@x.test', roles: ['MADRASA_ADMIN'] }).then(() => as('admin2@x.test'))
     const rs = await Promise.all([admin.post(`/api/v1/payments/submissions/${s.id}/approve`, {}), admin2.post(`/api/v1/payments/submissions/${s.id}/approve`, {}), admin.post(`/api/v1/payments/submissions/${s.id}/approve`, {})])
     expect(rs.map((r) => r.status).sort()).toEqual([200, 409, 409])
     expect(await prisma.payment.count()).toBe(1)
@@ -175,7 +175,7 @@ describe('verifying', () => {
   })
 
   it('nobody can approve a payment they submitted themselves', async () => {
-    const both = await makeUser({ email: 'adminparent@x.test', roles: ['ADMIN', 'PARENT'] })
+    const both = await makeUser({ email: 'adminparent@x.test', roles: ['MADRASA_ADMIN', 'PARENT'] })
     await prisma.guardian.update({ where: { id: fx.guardians.p2.id }, data: { userId: both.id } })
     const c = await as('adminparent@x.test')
     const s = (await c.post('/api/v1/payments/submissions', claim({ studentId: fx.students.bilal.id }))).body

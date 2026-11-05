@@ -1,12 +1,11 @@
-import type { Prisma } from '../../generated/prisma/client.js'
 import type { NotificationCategory, NotificationChannel } from '../../generated/prisma/enums.js'
 import { institutionToday } from '../../common/clock.js'
 import { logger } from '../../common/logger.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { sendMail } from '../../integrations/mail/mailer.js'
 import { invoiceView } from '../fees/fees.service.js'
 
-type Db = Prisma.TransactionClient | typeof prisma
+type Db = Tx | typeof prisma
 
 /** Retry delays after a failed send; then the delivery is marked failed for good. */
 const BACKOFF_MIN = [1, 5, 30, 120]

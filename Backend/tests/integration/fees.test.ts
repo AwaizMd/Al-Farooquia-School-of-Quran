@@ -1,15 +1,10 @@
-import { createHmac } from 'node:crypto'
-import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { institutionToday } from '../../src/common/clock.js'
-import type { Request } from 'express'
-import { fiscalYearOf, discountFor, issueInvoices, receive, refundPayment } from '../../src/modules/fees/fees.service.js'
-import { razorpayProvider } from '../../src/integrations/payments/razorpay.js'
-import { resetDatabase } from '../helpers/db.js'
-import { PASSWORD, app, client, type Client } from '../helpers/auth.js'
+import { fiscalYearOf, discountFor, issueInvoices } from '../../src/modules/fees/fees.service.js'
+import { inMadrasa, resetDatabase } from '../helpers/db.js'
+import { PASSWORD, client, type Client } from '../helpers/auth.js'
 import { seedPeopleFixture } from '../helpers/people.js'
-import { enablePayments } from '../helpers/payments.js'
 
 let fx: Awaited<ReturnType<typeof seedPeopleFixture>>
 let admin: Client
@@ -18,7 +13,7 @@ let period: string
 beforeEach(async () => {
   await resetDatabase()
   fx = await seedPeopleFixture()
-  today = await institutionToday()
+  today = await inMadrasa(fx.madrasa.id, () => institutionToday())
   period = today.slice(0, 7)
   admin = await as('admin@x.test')
 })
@@ -29,7 +24,6 @@ async function as(identifier: string): Promise<Client> {
 }
 const balanceOf = async (c: Client, ref: string) => (await c.get(`/api/v1/fees/students/${ref}`)).body.totals.balanceMinor as number
 const prevPeriod = () => { const d = new Date(`${period}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7) }
-const signDev = (body: object) => { const raw = JSON.stringify(body); return { raw, sig: createHmac('sha256', 'test-webhook-secret-0123456789').update(raw).digest('hex') } }
 
 describe('invoicing', () => {
   it('issues one invoice per student per period with the concession applied, idempotently', async () => {
@@ -56,8 +50,8 @@ describe('invoicing', () => {
 
   it('bills students admitted on the last days of a month for that month', async () => {
     const late = await prisma.student.create({ data: { admissionNo: 'S-31', name: 'Late Admission', gender: 'MALE', dob: new Date('2013-01-01T00:00:00Z'), admissionDate: new Date('2026-01-31T00:00:00Z'), groupId: fx.groups.gA.id, phone: '+91 90000 00009', feePlanId: fx.plan.id } })
-    expect((await issueInvoices(null, '2026-01', late.id)).created).toBe(1)
-    expect((await issueInvoices(null, '2025-12', late.id)).created).toBe(0)
+    expect((await inMadrasa(fx.madrasa.id, () => issueInvoices(null, '2026-01', late.id))).created).toBe(1)
+    expect((await inMadrasa(fx.madrasa.id, () => issueInvoices(null, '2025-12', late.id))).created).toBe(0)
   })
 
   it('uses the April–March financial year for receipt numbers', () => {
@@ -80,6 +74,14 @@ describe('office payments', () => {
     const fy = fiscalYearOf(today)
     expect([r1.body.receiptNo, r2.body.receiptNo]).toEqual([`NR-${fy}-0001`, `NR-${fy}-0002`])
     expect(await balanceOf(admin, 'S-2')).toBe(0)
+  })
+
+  it('pays the oldest period first even when a late-issued invoice is due after a newer one', async () => {
+    const inv = (number: string, p: string, due: string) => ({ number, studentId: fx.students.ali.id, period: p, planId: fx.plan.id, currency: 'INR', grossMinor: 10000, discountMinor: 0, amountMinor: 10000, issuedOn: new Date('2020-01-01'), dueDate: new Date(due) })
+    await prisma.invoice.create({ data: inv('OLD', '2020-01', '2020-03-20') })
+    await prisma.invoice.create({ data: inv('NEW', '2020-02', '2020-03-10') })
+    const r = await admin.post('/api/v1/fees/payments', { studentId: fx.students.ali.id, amountMinor: 10000, method: 'CASH' })
+    expect(r.body.allocations.map((a: { period: string }) => a.period)).toEqual(['2020-01'])
   })
 
   it('refuses overpayment and never double-allocates under concurrent payments', async () => {
@@ -127,16 +129,6 @@ describe('office payments', () => {
     expect(refunded._sum.amountMinor).toBe(30000)
   })
 
-  it('a refund the gateway declines leaves the balance unchanged', async () => {
-    const req = { auth: { user: { id: fx.users.admin.id, displayName: 'Admin' }, roles: ['ADMIN'] }, ip: null, id: 'test' } as unknown as Request
-    const att = await prisma.paymentAttempt.create({ data: { reference: 'PA-T', studentId: fx.students.bilal.id, payerUserId: fx.users.otherParent.id, invoiceIds: [], amountMinor: 50000, currency: 'INR', provider: 'dev', status: 'SUCCEEDED', providerPaymentId: 'pay_t', expiresAt: new Date() } })
-    const pay = await prisma.$transaction((tx) => receive(tx, { studentId: fx.students.bilal.id, amountMinor: 50000, method: 'ONLINE', source: 'ONLINE', receivedOn: today, paymentAttemptId: att.id }, today))
-    const before = await balanceOf(admin, 'S-2')
-    await expect(refundPayment(req, pay.id, { amountMinor: 20000, reason: 'Declined refund' }, async () => ({ status: 'FAILED' }))).rejects.toMatchObject({ code: 'REFUND_FAILED' })
-    expect(await balanceOf(admin, 'S-2')).toBe(before)
-    expect(await prisma.refund.findFirstOrThrow({ where: { paymentId: pay.id }, include: { allocations: true } })).toMatchObject({ status: 'FAILED', allocations: [] })
-  })
-
   it('voids only invoices with no activity', async () => {
     const [prev] = (await admin.get('/api/v1/fees/students/S-2')).body.invoices.slice(-1)
     await admin.post('/api/v1/fees/payments', { studentId: fx.students.bilal.id, amountMinor: 1000, method: 'CASH' })
@@ -165,98 +157,5 @@ describe('who can see and record fees', () => {
     const pr = await as('principal@x.test')
     expect((await pr.get('/api/v1/fees')).body.invoices).toHaveLength(3)
     expect((await pr.post('/api/v1/fees/payments', { studentId: fx.students.ali.id, amountMinor: 100, method: 'CASH' })).status).toBe(403)
-  })
-})
-
-describe('online payments', () => {
-  beforeEach(async () => {
-    await enablePayments({ online: true })
-    await admin.post('/api/v1/fees/invoices/issue', { period })
-  })
-
-  it('the server sets the amount; the client cannot', async () => {
-    const p = await as('p1@x.test')
-    const r = await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id, amountMinor: 1 })
-    expect(r.status).toBe(201)
-    expect(r.body).toMatchObject({ amountMinor: 135000, status: 'PENDING', provider: 'dev' })
-    expect(r.body.checkout).not.toHaveProperty('secret')
-  })
-
-  it('only a linked guardian with payment rights can start a payment', async () => {
-    expect((await (await as('p2@x.test')).post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).status).toBe(404)
-    await prisma.studentGuardian.updateMany({ where: { guardianId: fx.guardians.p1.id }, data: { canPay: false } })
-    expect((await (await as('p1@x.test')).post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).status).toBe(403)
-  })
-
-  it('a payment counts only after a verified webhook; replays never credit twice', async () => {
-    const p = await as('p1@x.test')
-    const att = (await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).body
-    // Returning from checkout proves nothing: still pending, still owed.
-    expect((await p.get(`/api/v1/payments/attempts/${att.id}`)).body.status).toBe('PENDING')
-    expect(await balanceOf(p, 'S-1')).toBe(135000)
-
-    const event = { id: 'evt_1', type: 'payment.succeeded', orderId: att.checkout.orderId, paymentId: 'pay_1', amountMinor: 135000, currency: 'INR' }
-    const forged = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', 'deadbeef').set('Content-Type', 'application/json').send(JSON.stringify(event))
-    expect(forged.status).toBe(400)
-    expect(await prisma.payment.count()).toBe(0)
-
-    const { raw, sig } = signDev(event)
-    const ok = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
-    expect(ok.body).toEqual({ received: true, duplicate: false })
-    const again = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
-    expect(again.body.duplicate).toBe(true)
-    // A different event id for the same order (gateway retry) is also not credited twice.
-    const retry = signDev({ ...event, id: 'evt_2' })
-    await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', retry.sig).set('Content-Type', 'application/json').send(retry.raw)
-
-    expect(await prisma.payment.count()).toBe(1)
-    const status = (await p.get(`/api/v1/payments/attempts/${att.id}`)).body
-    expect(status).toMatchObject({ status: 'SUCCEEDED', receiptNo: expect.stringMatching(/^NR-\d{4}-0001$/) })
-    expect(await balanceOf(p, 'S-1')).toBe(0)
-  })
-
-  it('a gateway retry after a failed processing attempt still credits the payment', async () => {
-    const p = await as('p1@x.test')
-    const att = (await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).body
-    const event = { id: 'evt_crash', type: 'payment.succeeded', orderId: att.checkout.orderId, paymentId: 'pay_c', amountMinor: 135000, currency: 'INR' }
-    // The first delivery was recorded, then processing crashed before completing.
-    await prisma.webhookEvent.create({ data: { provider: 'dev', eventId: 'evt_crash', type: 'payment.succeeded', signatureValid: true, payload: event } })
-    const { raw, sig } = signDev(event)
-    const retry = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
-    expect(retry.body).toEqual({ received: true, duplicate: false })
-    expect(await prisma.payment.count()).toBe(1)
-    expect(await balanceOf(p, 'S-1')).toBe(0)
-    const replay = await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
-    expect(replay.body.duplicate).toBe(true)
-  })
-
-  it('a gateway amount that does not match is not credited', async () => {
-    const p = await as('p1@x.test')
-    const att = (await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).body
-    const { raw, sig } = signDev({ id: 'evt_x', type: 'payment.succeeded', orderId: att.checkout.orderId, paymentId: 'pay_x', amountMinor: 100, currency: 'INR' })
-    await request(app).post('/api/v1/payments/webhooks/dev').set('x-dev-signature', sig).set('Content-Type', 'application/json').send(raw)
-    expect(await prisma.payment.count()).toBe(0)
-    expect((await p.get(`/api/v1/payments/attempts/${att.id}`)).body).toMatchObject({ status: 'FAILED', failureReason: 'amount_mismatch' })
-  })
-
-  it('money arriving after the balance was cleared is recorded for review, not lost', async () => {
-    const p = await as('p1@x.test')
-    const att = (await p.post('/api/v1/payments/attempts', { studentId: fx.students.ali.id })).body
-    await admin.post('/api/v1/fees/payments', { studentId: fx.students.ali.id, amountMinor: 135000, method: 'CASH' })
-    const done = await p.post(`/api/v1/payments/dev/attempts/${att.id}/complete`, { outcome: 'success' })
-    expect(done.body.status).toBe('SUCCEEDED')
-    const online = await prisma.payment.findFirstOrThrow({ where: { source: 'ONLINE' } })
-    expect(online.unallocatedMinor).toBe(135000)
-    expect(await prisma.auditLog.count({ where: { action: 'fees.online_payment_confirmed', summary: { contains: 'review' } } })).toBe(1)
-  })
-
-  it('verifies Razorpay signatures over the raw body', () => {
-    const rp = razorpayProvider({ keyId: 'k', keySecret: 's', webhookSecret: 'whsec' })
-    const raw = Buffer.from(JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_9', order_id: 'order_9', amount: 500, currency: 'INR', status: 'captured', card: { last4: '4242' } } } } }))
-    const sig = createHmac('sha256', 'whsec').update(raw).digest('hex')
-    const ev = rp.verifyWebhook(raw, { 'x-razorpay-signature': sig, 'x-razorpay-event-id': 'e9' })
-    expect(ev).toMatchObject({ eventId: 'e9', type: 'payment.succeeded', providerOrderId: 'order_9', amountMinor: 500 })
-    expect(JSON.stringify(ev!.stored)).not.toContain('4242') // card details are not stored
-    expect(rp.verifyWebhook(Buffer.from(raw.toString().replace('500', '50000')), { 'x-razorpay-signature': sig })).toBeNull()
   })
 })

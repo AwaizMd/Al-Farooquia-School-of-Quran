@@ -30,33 +30,40 @@ The web app needs no secrets. By default it calls the API on the same origin (`/
 
 ```bash
 cd Frontend && npm test      # web app: renders every page for every role against a fake API
-cd Backend && npm test       # API: 183 unit, integration and security tests on a throwaway database
+cd Backend && npm test       # API: 178 unit, integration and security tests on a throwaway database
 ```
+
+## Organization and madrasas
+
+One organization (the trust) runs several madrasas. Every record belongs to one madrasa, and staff see only the madrasas they work in. Someone with roles in more than one madrasa, or a parent with children in several, gets a madrasa switcher in the header. Each madrasa has its own settings, bank account and UPI QR, receipt series and modules (hostel, fees, examinations and so on can be switched off per madrasa). Details: [Backend/docs/ROLES.md](Backend/docs/ROLES.md).
 
 ## What each role can do
 
-- **Administrator:**
+- **Super Admin:** everything a Madrasa Admin can do, in every madrasa; adds madrasas (optionally copying another's settings) and switches modules on or off.
+- **Madrasa Admin:**
   - Manages students (admissions, guardians, halqas, concessions), mentors and halqa assignments.
   - Handles attendance corrections, exams and grading, fees (invoices, office payments, adjustments, refunds) and reminders.
-  - Chooses how families pay (Razorpay, bank transfer, UPI QR) in Fee Payment Settings, and approves or rejects reported bank/UPI payments in Payment Verification.
-  - Runs the hostel and library, reports, the activity log, institution settings, the parent-report schedule and background jobs.
+  - Enters the madrasa's bank details and UPI QR in Fee Payment Settings, and approves or rejects reported bank/UPI payments in Payment Verification.
+  - Runs the hostel, reports, the activity log, madrasa settings, the parent-report schedule and background jobs.
   - Manages accounts, roles and MFA resets.
-- **Principal:** reads everything academic and operational, including fees, reported payments, reports and the activity log, and can correct attendance. Has no settings, account or security administration.
+- **Principal:** reads everything academic and operational in their madrasa, including fees, reported payments, reports and the activity log, and can correct attendance. Has no settings, account or security administration.
+- **Accountant:** records office payments, issues invoices, sends reminders and verifies reported bank/UPI payments in their madrasa.
+- **Chartered Accountant (CA):** read-only fee records of the madrasas assigned to them; the access can expire on a set date.
+- **Committee Member:** read-only overview of the assigned madrasas (the analytics dashboards are being built).
 - **Mentor:**
   - Sees only the halqas currently assigned to them.
   - Marks today's attendance, records Sabaq/Sabqi/Manzil/Nazira/Qaida, and schedules tests and enters marks.
-  - Can add library resources.
 - **Warden:** manages hostel rooms, beds, transfers and the night roll call, seeing residents' hostel details only.
 - **Parent:**
   - Sees each linked child (and can switch between them): attendance, lessons and targets, mentor feedback, published results and report cards, fees and receipts, and notifications.
-  - Pays fees by the methods the Madarsa offers: online, or by bank transfer / UPI QR reported for verification (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Receives scheduled progress reports.
-- **Student:** sees their own learning journey, records, results, fees and library.
+  - Pays fees by bank transfer or UPI QR straight to the child's madrasa and reports it for verification; there is no online gateway (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Receives scheduled progress reports.
+- **Student:** sees their own learning journey, records, results and fees.
 
 Every rule above is enforced by the API: a hidden button is never the only protection. See [Backend/docs/SECURITY.md](Backend/docs/SECURITY.md).
 
 ## How the web app gets its data
 
-`src/api/` is the only code that talks to the server. After sign-in, the records the account is allowed to see are loaded into an in-memory cache (`src/context/DemoStore.jsx`), and the screens compute their figures from it with `src/services/selectors.js`. Every change is sent to the API first, and the affected data is then reloaded. Nothing is stored in the browser apart from the language choice.
+`src/api/` is the only code that talks to the server. After sign-in, the records the account is allowed to see are loaded into an in-memory cache (`src/context/DemoStore.jsx`), and the screens compute their figures from it with `src/services/selectors.js`. Every change is sent to the API first, and the affected data is then reloaded. Nothing is stored in the browser apart from the language and the chosen madrasa.
 
 `Frontend/src/data/` keeps the fictional demo dataset. It is used only to seed development databases and by the tests; it is not part of the production bundle.
 
@@ -65,11 +72,11 @@ Every rule above is enforced by the API: a hidden button is never the only prote
 These still need real accounts or decisions from the Madarsa:
 
 1. **Email:** an SMTP provider for invitations, password resets, reminders and reports. This is required.
-2. **Fee payments:** in Fee Payment Settings, enter the bank details and/or upload the Madarsa's UPI QR code, and, for online payment, a Razorpay account tested in test mode first (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Until a method is set up, families are asked to pay at the office.
+2. **Fee payments:** in each madrasa's Fee Payment Settings, enter its bank details and/or upload its UPI QR code (see [Backend/docs/PAYMENTS.md](Backend/docs/PAYMENTS.md)). Until a method is set up, families are asked to pay at the office.
 3. **WhatsApp or SMS (optional):** a provider, approved templates, and DLT registration for SMS in India.
 4. **Hosting:** a VPS and domain. The deployment files have not been run yet.
 5. **Real data:** the people records, entered through the app or imported.
 
 ## Languages (English / اردو)
 
-Switch with the **EN / اردو** control on the sign-in screen, in the header, or under **More** on a phone. Urdu switches the layout to right-to-left. Translations live in `src/i18n/ur.js`, keyed by the English text; any missing key falls back to English. Names, addresses, library titles, activity-log text and CSV exports stay in English, as does anything a user types.
+Switch with the **EN / اردو** control on the sign-in screen, in the header, or under **More** on a phone. Urdu switches the layout to right-to-left. Translations live in `src/i18n/ur.js`, keyed by the English text; any missing key falls back to English. Names, addresses, activity-log text and CSV exports stay in English, as does anything a user types.

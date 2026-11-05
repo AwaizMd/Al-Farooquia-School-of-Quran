@@ -1,14 +1,12 @@
 import type { Request } from 'express'
-import type { Prisma } from '../../generated/prisma/client.js'
 import type { HostelRollStatus } from '../../generated/prisma/enums.js'
 import { AppError, conflict, notFound } from '../../common/errors.js'
 import { addDaysIso, daysBetween, institutionToday } from '../../common/clock.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
 
-type Tx = Prisma.TransactionClient
 
 export async function overview() {
   const rooms = await prisma.hostelRoom.findMany({
@@ -47,6 +45,7 @@ export async function assignBed(req: Request, bedId: string, studentId: string) 
 
 export async function releaseBed(req: Request, bedId: string, reason: string) {
   await prisma.$transaction(async (tx) => {
+    if (!(await tx.hostelBed.findUnique({ where: { id: bedId }, select: { id: true } }))) throw notFound()
     const a = await tx.bedAssignment.findFirst({ where: { bedId, endedAt: null }, include: { student: true, bed: { include: { room: true } } } })
     if (!a) throw conflict('BED_EMPTY', 'This bed is not occupied.')
     await tx.bedAssignment.update({ where: { id: a.id }, data: { endedAt: new Date(), endReason: reason } })

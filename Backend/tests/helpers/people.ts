@@ -1,4 +1,4 @@
-import { prisma } from '../../src/database/prisma.js'
+import { prisma, seedMadrasa } from './db.js'
 import { makeUser } from './auth.js'
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -9,9 +9,10 @@ const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
  *  halqa B (mentor M2)               → Sara (guardian P1)
  */
 export async function seedPeopleFixture() {
-  await prisma.mfaPolicy.createMany({ data: [{ role: 'ADMIN', required: false }, { role: 'PRINCIPAL', required: false }, { role: 'MENTOR', required: false }, { role: 'STUDENT', required: false }, { role: 'PARENT', required: false }, { role: 'WARDEN', required: false }], skipDuplicates: true })
+  const madrasa = await seedMadrasa()
+  await prisma.mfaPolicy.createMany({ data: (['SUPER_ADMIN', 'MADRASA_ADMIN', 'PRINCIPAL', 'COMMITTEE_MEMBER', 'CA', 'ACCOUNTANT', 'MENTOR', 'STUDENT', 'PARENT', 'WARDEN'] as const).map((role) => ({ role, required: false })), skipDuplicates: true })
   const users = {
-    admin: await makeUser({ email: 'admin@x.test', roles: ['ADMIN'] }),
+    admin: await makeUser({ email: 'admin@x.test', roles: ['MADRASA_ADMIN'] }),
     principal: await makeUser({ email: 'principal@x.test', roles: ['PRINCIPAL'] }),
     mentor: await makeUser({ email: 'm1@x.test', roles: ['MENTOR'] }),
     parent: await makeUser({ email: 'p1@x.test', roles: ['PARENT'] }),
@@ -19,7 +20,6 @@ export async function seedPeopleFixture() {
     warden: await makeUser({ email: 'warden@x.test', roles: ['WARDEN'] }),
     student: await makeUser({ username: 's-1', roles: ['STUDENT'] }),
   }
-  await prisma.gradingScale.create({ data: { version: 1, active: true, bands: { create: [{ grade: 'Mumtaz', minPercent: 85 }, { grade: 'Jayyid Jiddan', minPercent: 70 }, { grade: 'Jayyid', minPercent: 55 }, { grade: 'Maqbool', minPercent: 40 }, { grade: 'Rasib', minPercent: 0 }] } } })
   const plan = await prisma.feePlan.create({ data: { code: 'fp', name: 'Hifz', amountMinor: 150000, currency: 'INR' } })
   const m1 = await prisma.staffProfile.create({ data: { code: 'm1', displayName: 'Mentor One', title: 'Hifz Mentor', userId: users.mentor.id } })
   const m2 = await prisma.staffProfile.create({ data: { code: 'm2', displayName: 'Mentor Two', title: 'Nazira Mentor' } })
@@ -34,5 +34,5 @@ export async function seedPeopleFixture() {
   const ali = await mk('S-1', 'Ali', gA.id, p1.id, { hostelResident: true, userId: users.student.id, concessions: { create: { kind: 'SIBLING', percent: 10 } } })
   const bilal = await mk('S-2', 'Bilal', gA.id, p2.id)
   const sara = await mk('S-3', 'Sara', gB.id, p1.id, { gender: 'FEMALE' })
-  return { users, plan, staff: { m1, m2 }, groups: { gA, gB }, guardians: { p1, p2 }, students: { ali, bilal, sara } }
+  return { madrasa, users, plan, staff: { m1, m2 }, groups: { gA, gB }, guardians: { p1, p2 }, students: { ali, bilal, sara } }
 }

@@ -1,4 +1,5 @@
 import type { Request } from 'express'
+import { lockRow } from '../../tenancy/locks.js'
 import type { AttendanceStatus } from '../../generated/prisma/enums.js'
 import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
 import { addDaysIso, daysBetween, institutionToday } from '../../common/clock.js'
@@ -51,7 +52,7 @@ export async function markAttendance(req: Request, input: MarkInput) {
 
   const result = await prisma.$transaction(async (tx) => {
     // Serialise saves of the same register (e.g. a double tap or two devices).
-    await tx.$queryRaw`SELECT id FROM groups WHERE id = ${group.id}::uuid FOR UPDATE`
+    await lockRow(tx, 'groups', group.id)
     const session = await tx.attendanceSession.upsert({
       where: { groupId_date: { groupId: group.id, date: day } },
       create: { groupId: group.id, date: day, markedById: auth.user.id },

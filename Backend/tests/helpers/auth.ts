@@ -2,14 +2,19 @@ import request from 'supertest'
 import { vi } from 'vitest'
 import type { Role } from '../../src/generated/prisma/enums.js'
 import { createApp } from '../../src/app.js'
-import { prisma } from '../../src/database/prisma.js'
+import { ORG_ROLES } from '../../src/tenancy/access.js'
+import { currentMadrasa, prisma, seedMadrasa } from './db.js'
 import { hashPassword } from '../../src/modules/auth/password.js'
 import { codeAt } from '../../src/modules/mfa/totp.js'
 
 export const app = createApp()
 export const PASSWORD = 'correct horse battery'
 
-export async function makeUser(opts: { email?: string; username?: string; roles: Role[]; status?: 'ACTIVE' | 'INVITED' | 'DISABLED'; name?: string }) {
+/** Organization roles go to user_roles; madrasa roles become memberships of the given (default: current test) madrasa. */
+export async function makeUser(opts: { email?: string; username?: string; roles: Role[]; status?: 'ACTIVE' | 'INVITED' | 'DISABLED'; name?: string; madrasaId?: string; expiresAt?: Date }) {
+  const local = opts.roles.filter((r) => !ORG_ROLES.includes(r))
+  // Accounts are created in a madrasa (their home), like the admin screen does.
+  const madrasaId = opts.madrasaId ?? currentMadrasa() ?? (await seedMadrasa()).id
   return prisma.user.create({
     data: {
       displayName: opts.name ?? 'Test User',
@@ -18,7 +23,9 @@ export async function makeUser(opts: { email?: string; username?: string; roles:
       username: opts.username ?? null,
       passwordHash: opts.status === 'INVITED' ? null : await hashPassword(PASSWORD),
       status: opts.status ?? 'ACTIVE',
-      roles: { create: opts.roles.map((role) => ({ role })) },
+      roles: { create: opts.roles.filter((r) => ORG_ROLES.includes(r)).map((role) => ({ role })) },
+      homeMadrasaId: madrasaId,
+      memberships: { create: local.map((role) => ({ madrasaId, role, expiresAt: opts.expiresAt ?? null })) },
     },
   })
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import App from '../app/App'
 import { NAV } from '../constants/navigation'
-import { PERSONAS, fakeFetch } from './fakeApi'
+import { MADRASAS, PERSONAS, fakeFetch } from './fakeApi'
 
 afterEach(() => {
   cleanup()
@@ -49,15 +49,15 @@ describe.each(Object.keys(PERSONAS))('%s', (persona) => {
 })
 
 describe('fee payment methods', () => {
-  it('a parent sees only the methods the Madarsa offers, with bank details to copy', async () => {
+  it('a parent sees only the methods the madrasa offers (no online gateway), with bank details to copy', async () => {
     await boot('parent', '/fees')
     await screen.findByRole('button', { name: /pay fees/i }, { timeout: 5000 })
     await act(async () => { screen.getByRole('button', { name: /pay fees/i }).click() })
-    await screen.findByRole('radio', { name: /pay online/i })
+    await screen.findByRole('radio', { name: /bank transfer/i })
     // Dialogs live directly in <body>, so an animated page wrapper cannot push them off-screen.
     expect(document.querySelector('[role=dialog]').parentElement).toBe(document.body)
-    expect(screen.getByRole('radio', { name: /bank transfer/i })).toBeTruthy()
-    expect(screen.queryByRole('radio', { name: /upi qr/i })).toBeNull() // not offered by this Madarsa
+    expect(screen.queryByRole('radio', { name: /pay online/i })).toBeNull() // CR-01: no payment gateway
+    expect(screen.queryByRole('radio', { name: /upi qr/i })).toBeNull() // not offered by this madrasa
     await act(async () => { screen.getByRole('radio', { name: /bank transfer/i }).click() })
     await act(async () => { screen.getByRole('button', { name: /continue/i }).click() })
     await screen.findByText('123456789012')
@@ -106,6 +106,51 @@ describe('server-scoped data reaches the screens', () => {
     expect(screen.queryByRole('link', { name: /add student/i })).toBeNull()
     await act(async () => { window.history.pushState({}, '', '/settings'); window.dispatchEvent(new PopStateEvent('popstate')) })
     await screen.findByText('Not available for this role')
+  })
+})
+
+describe('CR-01: madrasas, roles and removed modules', () => {
+  it('the digital library is gone from every menu and route', async () => {
+    for (const persona of Object.keys(NAV)) {
+      expect(JSON.stringify(NAV[persona]), persona).not.toMatch(/library/i)
+    }
+    await boot('student', '/library')
+    await waitFor(() => expect(document.querySelector('main')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.queryByText(/digital library/i)).toBeNull()
+  })
+
+  it('someone working in two madrasas can switch, and every request then names the chosen madrasa', async () => {
+    await boot('admin', '/dashboard')
+    const select = await screen.findAllByRole('combobox').then((all) => all.find((s) => [...s.options].some((o) => o.text === 'Girls Campus')))
+    expect(select).toBeTruthy()
+    await act(async () => { select.value = MADRASAS[1].id; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    await waitFor(() => {
+      const calls = fetch.mock.calls.filter(([, init]) => init?.headers?.['X-Madrasa-Id'] === MADRASAS[1].id)
+      expect(calls.length).toBeGreaterThan(0)
+    })
+  })
+
+  it('the madrasa switcher is not shown to someone in only one madrasa', async () => {
+    await boot('mentor', '/dashboard')
+    await waitFor(() => expect(document.querySelector('nav[aria-label="Main"]')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.queryAllByRole('combobox').filter((s) => [...s.options].some((o) => o.text === 'Girls Campus'))).toEqual([])
+  })
+
+  it('only a Super Admin sees the Madrasas page', async () => {
+    await boot('admin', '/organization')
+    await screen.findByText('Girls Campus', {}, { timeout: 5000 })
+    cleanup()
+    await boot('principal', '/organization')
+    await screen.findByText('Not available for this role', {}, { timeout: 5000 })
+  })
+
+  it('the Chartered Accountant and the Committee get their own read-only views', async () => {
+    await boot('ca', '/dashboard')
+    await waitFor(() => expect(document.querySelector('nav[aria-label="Main"]')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.queryByRole('link', { name: /record sabaq|users & access|settings/i })).toBeNull()
+    cleanup()
+    await boot('committee', '/dashboard')
+    await screen.findByText(/Performance dashboards/i, {}, { timeout: 5000 })
   })
 })
 

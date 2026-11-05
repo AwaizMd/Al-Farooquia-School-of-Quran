@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { failNextMail, testOutbox } from '../../src/integrations/mail/mailer.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, client, makeUser, nextCode, reauth, secretFrom, signInEnrolled, tick, type Client } from '../helpers/auth.js'
@@ -8,7 +8,7 @@ beforeEach(async () => {
   await resetDatabase()
   await prisma.mfaPolicy.createMany({
     data: [
-      { role: 'ADMIN', required: true }, { role: 'PRINCIPAL', required: true }, { role: 'MENTOR', required: true },
+      { role: 'MADRASA_ADMIN', required: true }, { role: 'PRINCIPAL', required: true }, { role: 'MENTOR', required: true },
       { role: 'STUDENT', required: false }, { role: 'PARENT', required: false }, { role: 'WARDEN', required: false },
     ],
   })
@@ -21,8 +21,8 @@ afterEach(() => {
 })
 
 async function adminSession(): Promise<{ c: Client; secret: string }> {
-  await makeUser({ email: 'admin@x.test', roles: ['ADMIN'], name: 'Admin' })
-  await makeUser({ email: 'admin2@x.test', roles: ['ADMIN'], name: 'Second Admin' })
+  await makeUser({ email: 'admin@x.test', roles: ['MADRASA_ADMIN'], name: 'Admin' })
+  await makeUser({ email: 'admin2@x.test', roles: ['MADRASA_ADMIN'], name: 'Second Admin' })
   const c = client()
   const { secret } = await signInEnrolled(c, 'admin@x.test')
   return { c, secret }
@@ -165,7 +165,7 @@ describe('administrative MFA reset (lost authenticator)', () => {
 
 describe('account administration guards', () => {
   it('protects the last administrator and blocks self-deactivation', async () => {
-    await makeUser({ email: 'solo@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'solo@x.test', roles: ['MADRASA_ADMIN'] })
     const c = client()
     const { secret } = await signInEnrolled(c, 'solo@x.test')
     await reauth(c, secret)
@@ -216,10 +216,10 @@ describe('account administration guards', () => {
   it('never lets the policy make MFA optional for Admin, Principal or Mentor', async () => {
     const { c, secret } = await adminSession()
     await reauth(c, secret)
-    for (const role of ['ADMIN', 'PRINCIPAL', 'MENTOR'] as const) {
+    for (const role of ['MADRASA_ADMIN', 'PRINCIPAL', 'MENTOR'] as const) {
       const r = await c.put('/api/v1/admin/security/mfa-policy', { policy: [{ role, required: false }] })
       expect(r.status).toBe(422)
     }
-    expect(await prisma.mfaPolicy.count({ where: { role: { in: ['ADMIN', 'PRINCIPAL', 'MENTOR'] }, required: false } })).toBe(0)
+    expect(await prisma.mfaPolicy.count({ where: { role: { in: ['MADRASA_ADMIN', 'PRINCIPAL', 'MENTOR'] }, required: false } })).toBe(0)
   })
 })

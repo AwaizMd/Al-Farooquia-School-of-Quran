@@ -1,13 +1,13 @@
+import { activeMadrasaId } from '../../tenancy/context.js'
 import type { Request } from 'express'
 import type { Prisma } from '../../generated/prisma/client.js'
 import type { ConcessionKind, Gender, StudentStatus } from '../../generated/prisma/enums.js'
 import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { ACCESS_INCLUDE, accessLevel, studentScope, type AccessLevel } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { releaseIfNotResident } from '../hostel/hostel.service.js'
 
-type Tx = Prisma.TransactionClient
 
 /** Institution defaults for each concession kind (approved with the student form). */
 export const CONCESSION_PERCENT: Record<ConcessionKind, number> = { SIBLING: 10, NEED_BASED: 50, FULL_SPONSORSHIP: 100 }
@@ -110,7 +110,9 @@ async function nextCode(tx: Tx, seq: 'admission_no_seq' | 'guardian_code_seq', p
 
 async function resolveGuardian(tx: Tx, g: GuardianInput) {
   if ('existingId' in g) {
-    const found = await tx.guardian.findUnique({ where: { id: g.existingId } })
+    // Guardians are shared across madrasas (one parent account for all their children), but
+    // a madrasa may only pick a guardian already linked to one of its own students.
+    const found = await tx.guardian.findFirst({ where: { id: g.existingId, students: { some: { madrasaId: activeMadrasaId() } } } })
     if (!found) throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'guardian.existingId', message: 'Guardian not found.' }])
     return found
   }

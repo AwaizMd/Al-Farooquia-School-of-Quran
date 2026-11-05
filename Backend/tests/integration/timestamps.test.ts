@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { client, makeUser } from '../helpers/auth.js'
 
 // The test database runs with TimeZone=Asia/Kolkata (see globalSetup), like a

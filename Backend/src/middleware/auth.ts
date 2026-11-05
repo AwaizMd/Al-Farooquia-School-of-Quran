@@ -3,15 +3,14 @@ import type { SessionStage } from '../generated/prisma/enums.js'
 import { env } from '../config/env.js'
 import { safeEqual } from '../common/crypto.js'
 import { AppError, forbidden, unauthenticated } from '../common/errors.js'
-import { permissionsFor, type Permission } from '../modules/auth/permissions.js'
+import type { Permission } from '../modules/auth/permissions.js'
 import { SESSION_COOKIE, findActiveSession } from '../modules/auth/session.service.js'
-import { UPLOAD_TYPES } from '../modules/library/library.service.js'
+import { allRolesOf } from '../tenancy/access.js'
 import { PROOF_UPLOAD_TYPES } from '../modules/fees/manual.service.js'
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // The only routes that take a raw (non-JSON) body: file uploads, which still need the CSRF token.
 const RAW_UPLOADS: { method: string; path: RegExp; types: string[] }[] = [
-  { method: 'PUT', path: /^\/library\/[0-9a-f-]{36}\/file$/i, types: UPLOAD_TYPES },
   { method: 'POST', path: /^\/payments\/proofs$/, types: PROOF_UPLOAD_TYPES },
   { method: 'PUT', path: /^\/admin\/payment-settings\/upi-qr$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
 ]
@@ -22,12 +21,15 @@ export const loadSession: RequestHandler = async (req, _res, next) => {
   if (typeof token !== 'string' || token.length < 20 || token.length > 100) return next()
   const s = await findActiveSession(token)
   if (s) {
-    const roles = s.user.roles.map((r) => r.role)
+    // Until resolveMadrasa narrows them to the active madrasa, roles are every role held anywhere.
+    const roles = await allRolesOf(s.user.id)
     req.auth = {
       session: { id: s.id, stage: s.stage, csrfToken: s.csrfToken, reauthenticatedAt: s.reauthenticatedAt, recoveryRequestId: s.recoveryRequestId },
       user: { id: s.user.id, displayName: s.user.displayName, email: s.user.email, username: s.user.username, locale: s.user.locale },
       roles,
-      permissions: permissionsFor(roles),
+      allRoles: roles,
+      // Granted per madrasa by resolveMadrasa, once the session is fully signed in.
+      permissions: new Set(),
     }
   }
   next()
@@ -44,7 +46,7 @@ export const csrfProtection: RequestHandler = (req, _res, next) => {
   const origin = req.get('origin')
   if (origin && !env.CORS_ORIGINS.includes(origin)) return next(forbidden('Cross-site request blocked.'))
   const hasBody = Number(req.get('content-length') ?? 0) > 0 || req.get('transfer-encoding') !== undefined
-  // The one exception: raw library uploads (still need the CSRF token below, which forms cannot send).
+  // The one exception: raw file uploads (still need the CSRF token below, which forms cannot send).
   const rawUpload = RAW_UPLOADS.some((u) => u.method === req.method && u.path.test(req.path) && req.is(u.types))
   if (hasBody && !req.is('application/json') && !rawUpload) return next(new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Requests must be sent as JSON.'))
   if (req.auth) {

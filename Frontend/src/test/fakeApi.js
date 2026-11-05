@@ -32,7 +32,10 @@ const students = STUDENT_SEEDS.map((s) => {
 const staff = MENTORS.map((m) => ({ id: uuid(m.id), code: m.id, displayName: m.name, title: m.role, phone: m.phone, email: m.email, joinedOn: m.joined, status: m.status.toUpperCase(), qualification: m.qualification, specialisation: m.specialisation, hasAccount: false, groups: groups.filter((g) => g.mentor.code === m.id).map((g) => ({ id: g.id, code: g.code, name: g.name })) }))
 
 export const PERSONAS = {
-  admin: { roles: ['ADMIN'], links: {}, displayName: 'Maulana Shoaib Akhtar', visible: () => true },
+  admin: { roles: ['SUPER_ADMIN', 'MADRASA_ADMIN'], links: {}, displayName: 'Maulana Shoaib Akhtar', visible: () => true },
+  accountant: { roles: ['ACCOUNTANT'], links: {}, displayName: 'Mohammed Salman', visible: () => true },
+  ca: { roles: ['CA'], links: {}, displayName: 'CA Rizwan Hussain', visible: () => false },
+  committee: { roles: ['COMMITTEE_MEMBER'], links: {}, displayName: 'Haji Abdul Kareem', visible: () => false },
   principal: { roles: ['PRINCIPAL'], links: { staff: { id: 'x', code: 'st-principal' } }, displayName: 'Mufti Abdul Qadir', visible: () => true },
   mentor: { roles: ['MENTOR'], links: { staff: { id: uuid('m1'), code: 'm1' } }, displayName: 'Qari Abdul Rahman Siddiqui', visible: (s) => s.group.code === 'g-hifz-a' },
   warden: { roles: ['WARDEN'], links: { staff: { id: 'w', code: 'st-warden' } }, displayName: 'Hafiz Naseeruddin', visible: (s) => s.hostelResident },
@@ -42,6 +45,20 @@ export const PERSONAS = {
 
 const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
+const ADMIN_PERMS = ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students']
+const PERMS = {
+  SUPER_ADMIN: ['org.manage', ...ADMIN_PERMS], MADRASA_ADMIN: ADMIN_PERMS,
+  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students'],
+  COMMITTEE_MEMBER: ['analytics.read'], CA: ['fees.read', 'accounts.read', 'accounts.export'],
+  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period'],
+  MENTOR: [], STUDENT: [], PARENT: [], WARDEN: ['hostel.read', 'hostel.manage'],
+}
+const FEATURES = { HOSTEL: true, FEES: true, ACCOUNTS: false, NAMAZ_TRACKING: false, STAFF_ATTENDANCE: false, ASSESSMENTS: true, SCHEDULED_REPORTS: true, BIOMETRIC: false }
+export const MADRASAS = [
+  { id: '00000000-0000-4000-8000-00000000aa01', code: 'MAIN', name: 'Al Farooquia School of Quran', shortName: 'Al Farooquia' },
+  { id: '00000000-0000-4000-8000-00000000aa02', code: 'GIRLS', name: 'Al Farooquia Girls Campus', shortName: 'Girls Campus' },
+]
+
 /** Returns a fetch implementation that answers as the given persona (or signed out). */
 export function fakeFetch(personaName) {
   const p = PERSONAS[personaName]
@@ -50,7 +67,10 @@ export function fakeFetch(personaName) {
     const path = url.pathname.replace('/api/v1', '')
     if (!p) return json({ error: { code: 'UNAUTHENTICATED', message: 'Please sign in to continue.' } }, 401)
     const mine = students.filter(p.visible)
-    if (path === '/auth/session') return json({ stage: 'full', csrfToken: 'csrf', user: { id: 'u', displayName: p.displayName, email: 'x@farooquia.demo', username: null, locale: 'en', roles: p.roles, links: p.links, mfa: { enabled: true, required: true, recoveryCodesRemaining: 10 } } })
+    const perms = [...new Set(p.roles.flatMap((r) => PERMS[r]))]
+    // Staff of the admin persona work in two madrasas (the switcher shows); everyone else in one.
+    const madrasas = (personaName === 'admin' ? MADRASAS : MADRASAS.slice(0, 1)).map((m) => ({ ...m, roles: p.roles }))
+    if (path === '/auth/session') return json({ stage: 'full', csrfToken: 'csrf', user: { id: 'u', displayName: p.displayName, email: 'x@farooquia.demo', username: null, locale: 'en', roles: p.roles, links: p.links, mfa: { enabled: true, required: true, recoveryCodesRemaining: 10 } }, madrasa: { ...MADRASAS[0], features: FEATURES }, madrasas, permissions: perms })
     if (path === '/students') return json({ total: mine.length, page: 1, pageSize: 500, items: mine })
     if (path === '/groups') return json({ items: groups })
     if (path === '/staff') return json({ items: staff })
@@ -68,15 +88,14 @@ export function fakeFetch(personaName) {
     }
     if (path === '/exams') {
       const codes = new Set(mine.map((x) => x.group.code))
-      const items = demo.exams.filter((e) => p.roles.some((r) => r === 'ADMIN' || r === 'PRINCIPAL') || e.groupIds.some((g) => codes.has(g))).map((e) => ({ id: uuid(e.id), code: e.id, title: e.title, type: e.type, track: e.track.toUpperCase(), date: e.date, status: 'PUBLISHED', groups: e.groupIds.map((g) => ({ code: g })), examiner: { code: e.examinerId }, subjects: e.subjects, grading: null }))
+      const items = demo.exams.filter((e) => perms.includes('students.read') || e.groupIds.some((g) => codes.has(g))).map((e) => ({ id: uuid(e.id), code: e.id, title: e.title, type: e.type, track: e.track.toUpperCase(), date: e.date, status: 'PUBLISHED', groups: e.groupIds.map((g) => ({ code: g })), examiner: { code: e.examinerId }, subjects: e.subjects, grading: null }))
       return json({ items })
     }
     if (path === '/exam-results') {
       const codes = new Set(p.roles.includes('WARDEN') ? [] : mine.map((x) => x.admissionNo))
       return json({ items: demo.results.filter((r) => codes.has(r.studentId)).map((r) => ({ id: r.id, examCode: r.examId, admissionNo: r.studentId, marks: r.marks, remark: r.remark, absent: false })) })
     }
-    if (path === '/admin/audit-logs') return json({ total: 1, page: 1, pageSize: 100, items: [{ id: 'a1', at: new Date().toISOString(), actorName: 'Office', actorRole: 'ADMIN', action: 'fees.payment_recorded', entityType: 'student', entityId: mine[0]?.id, summary: 'Receipt NR-2026-0001' }] })
-    if (path === '/library') return json({ items: [{ id: 'l1', title: 'Madd rules', category: 'Tajweed', type: 'Tajweed Guide', author: 'x', description: 'x', pages: 3, audience: 'ALL_STUDENTS', status: 'ACTIVE', uploadedAt: new Date().toISOString(), uploadedBy: 'Office', file: { name: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 10 }, canOpen: true }] })
+    if (path === '/admin/audit-logs') return json({ total: 1, page: 1, pageSize: 100, items: [{ id: 'a1', at: new Date().toISOString(), actorName: 'Office', actorRole: 'MADRASA_ADMIN', action: 'fees.payment_recorded', entityType: 'student', entityId: mine[0]?.id, summary: 'Receipt NR-2026-0001' }] })
     if (path === '/hostel') return json({ rooms: [{ id: 'r1', code: 'R-101', block: 'Bilal Block', floor: 'Ground', beds: [{ id: 'b1', label: 'Bed A', occupant: students.find((x) => x.hostelResident) }, { id: 'b2', label: 'Bed B', occupant: null }] }], unassigned: [] })
     if (path === '/hostel/roll-call') return json({ from: '', to: '', days: demo.hostelAttendance })
     if (path === '/notifications') return json({ items: [{ id: 'n1', title: 'Welcome', body: 'Hello', link: null, createdAt: new Date().toISOString(), readAt: null, category: 'GENERAL' }] })
@@ -85,12 +104,12 @@ export function fakeFetch(personaName) {
     if (path === '/scheduled-reports/config') return json({ enabled: true, frequency: 'MONTHLY', dayOfWeek: 6, dayOfMonth: 1, sendAt: '09:00', channels: ['EMAIL'], sections: ['attendance'] })
     if (path === '/scheduled-reports/runs') return json({ items: [] })
     if (path === '/admin/jobs') return json({ jobs: [], deliveries: {} })
-    if (path === '/payments/config') return json({ provider: 'dev' })
-    if (path === '/payments/options') return json({ online: { provider: 'dev' }, bank: { accountName: 'Al Farooquia Trust', bankName: 'Test Bank', accountNumber: '123456789012', ifsc: 'TEST0001234', branch: null, accountType: 'Current', instructions: 'Write the admission number in the remarks.', referenceHint: null, proofRequired: false }, upi: null })
+
+    if (path === '/payments/options') return json({ bank: { accountName: 'Al Farooquia Trust', bankName: 'Test Bank', accountNumber: '123456789012', ifsc: 'TEST0001234', branch: null, accountType: 'Current', instructions: 'Write the admission number in the remarks.', referenceHint: null, proofRequired: false }, upi: null })
     if (path === '/payments/submissions') return json({ total: 1, page: 1, pageSize: 50, items: [{ id: 'sub1', code: 'MP-SUB1', student: { id: mine[0]?.id, admissionNo: mine[0]?.admissionNo, name: mine[0]?.name, group: mine[0]?.group }, method: 'BANK_TRANSFER', invoiceIds: [], amountMinor: 50000, currency: 'INR', paidOn: todayISO(), reference: 'UTR123456789', note: null, proof: null, status: 'PENDING_VERIFICATION', reviewNote: null, reviewedAt: null, reviewedBy: null, submittedBy: 'Javed Khan', createdAt: new Date().toISOString(), approvedAmountMinor: null, payment: null }] })
-    if (path === '/admin/payment-settings') return json({ razorpay: { enabled: true, mode: 'TEST', source: 'development', keyId: null, keySecretSet: false, webhookSecretSet: false, validatedAt: null, webhookVerifiedAt: null, webhookUrl: 'http://localhost/api/v1/payments/webhooks/razorpay', canStoreSecrets: true, ready: true, problems: [] }, bank: { enabled: false, accountName: null, bankName: null, accountNumber: null, ifsc: null, branch: null, accountType: null, instructions: null, referenceHint: null, proofRequired: false, ready: false, problems: ['Enter the bank name.'] }, upi: { enabled: false, hasQr: false, upiId: null, payeeName: null, instructions: null, proofRequired: false, ready: false, problems: ['Upload the Madarsa’s UPI QR code.'] }, updatedAt: null })
+    if (path === '/admin/payment-settings') return json({ bank: { enabled: false, accountName: null, bankName: null, accountNumber: null, ifsc: null, branch: null, accountType: null, instructions: null, referenceHint: null, proofRequired: false, ready: false, problems: ['Enter the bank name.'] }, upi: { enabled: false, hasQr: false, upiId: null, payeeName: null, instructions: null, proofRequired: false, ready: false, problems: ['Upload the Madarsa’s UPI QR code.'] }, updatedAt: null })
     if (path === '/fees') {
-      const ok = p.roles.some((r) => ['ADMIN', 'PRINCIPAL', 'PARENT', 'STUDENT'].includes(r))
+      const ok = perms.includes('fees.read') || p.roles.some((r) => ['PARENT', 'STUDENT'].includes(r))
       const codes = new Set(ok ? mine.map((x) => x.admissionNo) : [])
       const invoices = demo.invoices.filter((i) => codes.has(i.studentId)).map((i) => ({ id: i.id, number: i.id, admissionNo: i.studentId, period: i.period, plan: { code: i.planId }, status: 'ISSUED', grossMinor: i.gross * 100, discountMinor: i.discount * 100, amountMinor: i.amount * 100, adjustedMinor: 0, dueMinor: i.amount * 100, issuedOn: i.issuedOn, dueDate: i.dueDate }))
       const payments = demo.payments.filter((x) => codes.has(x.studentId)).map((x) => ({ id: x.id, receiptNo: x.receiptNo, admissionNo: x.studentId, receivedOn: x.date, method: 'CASH', recordedBy: 'Office', note: null, allocations: [{ invoiceId: x.invoiceId, amountMinor: x.amount * 100, refundedMinor: 0 }] }))
@@ -99,6 +118,7 @@ export function fakeFetch(personaName) {
     if (path === '/grading') return json({ version: 1, bands: demo.grading })
     if (path === '/auth/sessions') return json({ items: [] })
     if (path === '/admin/users') return json({ total: 0, page: 1, pageSize: 100, items: [] })
+    if (path === '/org/madrasas' && perms.includes('org.manage')) return json({ items: MADRASAS.map((m) => ({ ...m, active: true, students: 12, staff: 4, features: FEATURES })) })
     return json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404)
   }
 }

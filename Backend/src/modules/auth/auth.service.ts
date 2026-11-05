@@ -10,6 +10,10 @@ import * as mfa from '../mfa/mfa.service.js'
 import { hashPassword, verifyPassword } from './password.js'
 import { clearSessionCookie, createSession, revokeAllSessions, revokeSession } from './session.service.js'
 import { consumeToken, issueToken, peekToken } from './tokens.js'
+import { permissionsFor } from './permissions.js'
+import { accessOf, allRolesOf, defaultMadrasa } from '../../tenancy/access.js'
+import { asOrg } from '../../tenancy/context.js'
+import { madrasaProfile } from '../../tenancy/settings.js'
 
 const invalidCredentials = () => new AppError(401, 'INVALID_CREDENTIALS', 'The sign-in details are not correct.')
 
@@ -22,27 +26,34 @@ const STAGE_NAME: Record<SessionStage, 'full' | 'mfa_required' | 'mfa_enrollment
 }
 
 /** What the client may know about the current session. Restricted stages reveal only the name. */
-export async function sessionView(userId: string, stage: SessionStage, csrfToken: string) {
+export async function sessionView(userId: string, stage: SessionStage, csrfToken: string, activeId?: string | null) {
   if (stage !== 'FULL') {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { displayName: true } })
     return { stage: STAGE_NAME[stage], csrfToken, user: { displayName: u.displayName } }
   }
-  const u = await prisma.user.findUniqueOrThrow({
-    where: { id: userId },
-    include: { roles: true, staffProfile: { select: { id: true, code: true } }, guardianProfile: { select: { id: true, code: true } }, studentProfile: { select: { id: true, admissionNo: true } } },
-  })
-  const roles = u.roles.map((r) => r.role)
-  // Which people records this account represents (for the web app's role views).
-  const links = { staff: u.staffProfile, guardian: u.guardianProfile, student: u.studentProfile }
-  const [enabled, required, codesLeft] = await Promise.all([mfa.activeCredential(u.id), mfa.isMfaRequired(roles), mfa.remainingRecoveryCodes(u.id)])
+  const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { guardianProfile: { select: { id: true, code: true } } } })
+  const access = await accessOf(userId)
+  // The madrasa the app is working in: the one chosen for this request, else the default.
+  const active = access.madrasas.find((m) => m.id === activeId) ?? defaultMadrasa(access)
+  const roles = active ? active.roles : [...new Set([...access.madrasas.flatMap((m) => m.roles), ...access.orgRoles])]
+  // Which people records this account represents in that madrasa (for the web app's role views).
+  const [staff, student] = await asOrg('the signed-in user’s own records', () => Promise.all([
+    active ? prisma.staffProfile.findFirst({ where: { userId, madrasaId: active.id }, select: { id: true, code: true } }) : null,
+    prisma.student.findFirst({ where: { userId }, select: { id: true, admissionNo: true } }),
+  ]))
+  const links = { staff, guardian: u.guardianProfile, student }
+  const [enabled, required, codesLeft] = await Promise.all([mfa.activeCredential(u.id), mfa.isMfaRequired(access.allRoles), mfa.remainingRecoveryCodes(u.id)])
   return {
     stage: STAGE_NAME[stage],
     csrfToken,
     user: { id: u.id, displayName: u.displayName, email: u.email, username: u.username, locale: u.locale, roles, links, mfa: { enabled: !!enabled, required, recoveryCodesRemaining: codesLeft } },
+    // Which modules are on decides the menu (the API refuses switched-off modules regardless).
+    madrasa: active ? { id: active.id, code: active.code, name: active.name, shortName: active.shortName, features: (await madrasaProfile(active.id)).features } : null,
+    madrasas: access.madrasas.map((m) => ({ id: m.id, code: m.code, name: m.name, shortName: m.shortName, roles: m.roles })),
+    permissions: [...permissionsFor(roles)],
   }
 }
 
-const rolesOf = async (userId: string) => (await prisma.userRole.findMany({ where: { userId } })).map((r) => r.role)
 
 /** Replace the caller's session with a new one (new token = no session fixation). */
 async function startSession(req: Request, res: Response, userId: string, stage: SessionStage, roles: Role[], extra: { recoveryRequestId?: string | null; reauthenticated?: boolean } = {}) {
@@ -56,14 +67,16 @@ export async function login(req: Request, res: Response, identifier: string, pas
   await consume(LIMITS.loginPerIp, req.ip ?? 'unknown')
   await consume(LIMITS.loginPerAccount, id)
 
-  const user = await prisma.user.findFirst({ where: { OR: [{ email: id }, { username: id }] }, include: { roles: true } })
+  const user = await prisma.user.findFirst({ where: { OR: [{ email: id }, { username: id }] } })
   const ok = await verifyPassword(user?.passwordHash, password)
   if (!user || !ok || user.status !== 'ACTIVE') {
     await audit({ action: 'auth.login_failed', summary: 'Failed sign-in attempt', entityType: 'user', entityId: user?.id, actor: { userId: null, name: 'Anonymous', role: 'anonymous' } }, req)
     throw invalidCredentials()
   }
   await clear(LIMITS.loginPerAccount, id)
-  const actor = { userId: user.id, name: user.displayName, role: user.roles.map((r) => r.role).join(',') }
+  // Every role in every madrasa: the strictest decides MFA and the session timeouts.
+  const roles = await allRolesOf(user.id)
+  const actor = { userId: user.id, name: user.displayName, role: roles.join(',') }
 
   if (user.mfaRecoveryPending) {
     // Correct password, but the authenticator was reset: only the recovery link or ticket can continue.
@@ -71,7 +84,6 @@ export async function login(req: Request, res: Response, identifier: string, pas
     throw new AppError(403, 'MFA_RECOVERY_REQUIRED', 'Your two-step verification was reset. Use the recovery link or ticket from the office to continue.')
   }
 
-  const roles = user.roles.map((r) => r.role)
   const [cred, required] = await Promise.all([mfa.activeCredential(user.id), mfa.isMfaRequired(roles)])
   const stage: SessionStage = cred ? 'PRE_MFA' : required ? 'MFA_ENROLLMENT' : 'FULL'
   await audit({ action: stage === 'FULL' ? 'auth.login' : 'auth.password_verified', summary: stage === 'FULL' ? 'Signed in' : 'Password verified; two-step verification pending', entityType: 'user', entityId: user.id, actor }, req)
@@ -103,7 +115,7 @@ export async function verifyMfa(req: Request, res: Response, code: string) {
     throw new AppError(400, 'INVALID_CODE', 'That code is not valid.')
   }
   await audit({ action: 'auth.login', summary: 'Signed in with two-step verification', entityType: 'user', entityId: userId }, req)
-  return startSession(req, res, userId, 'FULL', req.auth!.roles, { reauthenticated: true })
+  return startSession(req, res, userId, 'FULL', req.auth!.allRoles, { reauthenticated: true })
 }
 
 export async function useRecoveryCode(req: Request, res: Response, code: string) {
@@ -116,7 +128,7 @@ export async function useRecoveryCode(req: Request, res: Response, code: string)
   const left = await mfa.remainingRecoveryCodes(user.id)
   await audit({ action: 'mfa.recovery_code_used', summary: `Signed in with a recovery code (${left} left)`, entityType: 'user', entityId: user.id }, req)
   if (user.email) await sendMail({ to: user.email, subject: 'A recovery code was used to sign in', text: `Assalamu Alaikum ${user.displayName},\n\nA one-time recovery code was just used to sign in to your account. ${left} codes remain.\n\nIf this was not you, contact the Madarsa office immediately.` })
-  return startSession(req, res, user.id, 'FULL', req.auth!.roles, { reauthenticated: true })
+  return startSession(req, res, user.id, 'FULL', req.auth!.allRoles, { reauthenticated: true })
 }
 
 export async function beginEnrollment(req: Request) {
@@ -150,7 +162,7 @@ export async function confirmEnrollment(req: Request, res: Response, code: strin
     if (a.user.email) await sendMail({ to: a.user.email, subject: 'Two-step verification recovery completed', text: `Assalamu Alaikum ${a.user.displayName},\n\nYour new authenticator app is now active. Your old device no longer works for this account.\n\nIf you did not do this, contact the Madarsa office immediately.` })
   }
   // Enrollment proves possession of the new authenticator; issue a full session.
-  const session = a.session.stage === 'FULL' ? await sessionView(a.user.id, 'FULL', a.session.csrfToken) : await startSession(req, res, a.user.id, 'FULL', a.roles, { reauthenticated: true })
+  const session = a.session.stage === 'FULL' ? await sessionView(a.user.id, 'FULL', a.session.csrfToken, a.madrasa?.activeId) : await startSession(req, res, a.user.id, 'FULL', a.allRoles, { reauthenticated: true })
   return { session, recoveryCodes: codes }
 }
 
@@ -170,7 +182,7 @@ export async function reauthenticate(req: Request, password: string, code: strin
 
 export async function disableMfa(req: Request) {
   const a = req.auth!
-  if (await mfa.isMfaRequired(a.roles)) throw new AppError(403, 'MFA_MANDATORY', 'Two-step verification is required for your role and cannot be turned off.')
+  if (await mfa.isMfaRequired(a.allRoles)) throw new AppError(403, 'MFA_MANDATORY', 'Two-step verification is required for your role and cannot be turned off.')
   const n = await mfa.revokeAllCredentials(a.user.id)
   if (n === 0) throw new AppError(409, 'MFA_NOT_ENABLED', 'Two-step verification is not turned on.')
   await audit({ action: 'mfa.disabled', summary: 'Two-step verification turned off by the user', entityType: 'user', entityId: a.user.id }, req)
@@ -260,5 +272,5 @@ export async function startRecovery(req: Request, res: Response, token: string, 
     throw new AppError(400, 'INVALID_TOKEN', 'This recovery link or ticket is invalid, expired or already used. Contact the office.')
   }
   await audit({ action: 'mfa.recovery_identity_verified', summary: `Recovery ${t.method === 'IN_PERSON' ? 'ticket' : 'link'} and password verified`, entityType: 'user', entityId: user.id, actor: { userId: user.id, name: user.displayName, role: 'self' } }, req)
-  return startSession(req, res, user.id, 'MFA_ENROLLMENT', await rolesOf(user.id), { recoveryRequestId: t.id })
+  return startSession(req, res, user.id, 'MFA_ENROLLMENT', await allRolesOf(user.id), { recoveryRequestId: t.id })
 }

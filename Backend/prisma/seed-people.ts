@@ -3,8 +3,8 @@
 // dataset line up with the records served by the API.
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import { addDaysIso } from '../src/common/clock.js'
-import type { PrismaClient } from '../src/generated/prisma/client.js'
+import { activeMadrasaId } from '../src/tenancy/context.js'
+import type { Db as PrismaClient } from '../src/database/prisma.js'
 import type { ConcessionKind, GroupGender, Track } from '../src/generated/prisma/enums.js'
 
 type Any = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -163,11 +163,11 @@ export async function seedFees(prisma: PrismaClient, today: string) {
       },
     })
   }
-  for (const [fy, last] of Object.entries(counters)) await prisma.receiptSequence.upsert({ where: { fiscalYear: Number(fy) }, update: { last }, create: { fiscalYear: Number(fy), last } })
+  for (const [fy, last] of Object.entries(counters)) await prisma.receiptSequence.upsert({ where: { madrasaId_fiscalYear: { madrasaId: activeMadrasaId(), fiscalYear: Number(fy) } }, update: { last }, create: { fiscalYear: Number(fy), last } })
   return `${Object.keys(invoiceIds).length} invoices, ${groups.length} payments`
 }
 
-/** Development only: rooms, beds, residents, a week of roll calls and the library catalogue. */
+/** Development only: rooms, beds, residents and a week of roll calls. */
 export async function seedCampus(prisma: PrismaClient, today: string) {
   if ((await prisma.hostelRoom.count()) > 0) return 'campus already present, skipped'
   const catalog = await load('catalog.js')
@@ -181,23 +181,7 @@ export async function seedCampus(prisma: PrismaClient, today: string) {
   const roll = Object.entries(demo.hostelAttendance as Record<string, Record<string, string>>).flatMap(([date, m]) => Object.entries(m).filter(([c]) => students[c]).map(([c, status]) => ({ studentId: students[c]!, date: d(date), status: status.toUpperCase() as 'PRESENT' })))
   await prisma.hostelRollEntry.createMany({ data: roll })
 
-  const AUDIENCE: Record<string, 'ALL_STUDENTS' | 'HIFZ' | 'ALIM' | 'STAFF_ONLY'> = { 'All students': 'ALL_STUDENTS', 'Hifz groups': 'HIFZ', Alimiyyah: 'ALIM', 'Staff only': 'STAFF_ONLY' }
-  const { localStorage: disk } = await import('../src/integrations/storage/storage.js')
-  const { readFile } = await import('node:fs/promises')
-  const { createHash, randomUUID } = await import('node:crypto')
-  const store = disk(process.env.STORAGE_DIR ?? 'storage')
-  for (const item of catalog.LIBRARY as Any[]) {
-    const created = new Date(`${addDaysIso(today, item.uploaded)}T09:00:00Z`)
-    let fileId: string | null = null
-    if (item.file) {
-      const bytes = await readFile(resolve('..', 'Frontend', 'public', item.file.replace(/^\//, '')))
-      const key = `library/${randomUUID()}.pdf`
-      await store.put(key, bytes, 'application/pdf')
-      fileId = (await prisma.storedFile.create({ data: { storageKey: key, originalName: item.file.split('/').pop(), mimeType: 'application/pdf', sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } })).id
-    }
-    await prisma.libraryResource.create({ data: { title: item.title, category: item.category, type: item.type, author: item.author, description: item.description, pages: item.pages, audience: AUDIENCE[item.access] ?? 'ALL_STUDENTS', fileId, createdAt: created } })
-  }
-  return `${catalog.HOSTEL_ROOMS.length} rooms, ${roll.length} roll-call marks, ${catalog.LIBRARY.length} library items`
+  return `${catalog.HOSTEL_ROOMS.length} rooms, ${roll.length} roll-call marks`
 }
 
 /** Link the dev sign-in accounts to their people records. */

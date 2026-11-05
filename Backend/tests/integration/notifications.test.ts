@@ -1,30 +1,39 @@
 import { PgBoss } from 'pg-boss'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { addDaysIso, institutionToday } from '../../src/common/clock.js'
 import { failNextMail, testOutbox } from '../../src/integrations/mail/mailer.js'
-import { deliverDue } from '../../src/modules/notifications/notify.service.js'
-import { runReminders } from '../../src/modules/notifications/reminders.service.js'
-import { periodFor, runReport, tick } from '../../src/modules/scheduled-reports/reports.service.js'
+import * as notify from '../../src/modules/notifications/notify.service.js'
+import * as reminders from '../../src/modules/notifications/reminders.service.js'
+import * as reports from '../../src/modules/scheduled-reports/reports.service.js'
+import { asOrg } from '../../src/tenancy/context.js'
 import { JOBS, runTracked } from '../../src/jobs/registry.js'
-import { resetDatabase } from '../helpers/db.js'
+import { inMadrasa, resetDatabase } from '../helpers/db.js'
 import { PASSWORD, client, type Client } from '../helpers/auth.js'
 import { seedPeopleFixture } from '../helpers/people.js'
 import { TEST_DATABASE_URL } from '../../vitest.config.js'
 
 let fx: Awaited<ReturnType<typeof seedPeopleFixture>>
 let today: string
+// Jobs run per madrasa (the worker does the same); the outbox is organization-wide.
+const runReminders = (day?: string) => inMadrasa(fx.madrasa.id, () => reminders.runReminders(day))
+const runReport = (...a: Parameters<typeof reports.runReport>) => inMadrasa(fx.madrasa.id, () => reports.runReport(...a))
+const tick = (now?: Date) => inMadrasa(fx.madrasa.id, () => reports.tick(now))
+const deliverDue = () => asOrg('test outbox', () => notify.deliverDue())
+const { periodFor } = reports
 beforeEach(async () => {
   await resetDatabase()
   fx = await seedPeopleFixture()
-  today = await institutionToday()
+  today = await inMadrasa(fx.madrasa.id, () => institutionToday())
+  // Replace the default reminder rules and message with the ones these tests expect.
+  await prisma.reminderRule.deleteMany({})
+  await prisma.messageTemplate.deleteMany({})
   testOutbox.length = 0
   await prisma.reminderRule.createMany({ data: [
     { key: 'before', label: 'Before', offsetDays: -3, channels: ['EMAIL', 'IN_APP'], position: 1 },
     { key: 'after3', label: '3 days after', offsetDays: 3, channels: ['EMAIL', 'WHATSAPP'], position: 2 },
   ] })
   await prisma.messageTemplate.create({ data: { key: 'fee_reminder', subject: 'Fee reminder for {student}', body: 'Dear {guardian}, {student} owes {balance} for {period}, due {dueDate}.' } })
-  await prisma.scheduledReportConfig.create({ data: { id: 1 } })
   // Give the guardians sign-in emails so they can be reached.
   await prisma.guardian.update({ where: { id: fx.guardians.p1.id }, data: { email: 'p1@x.test' } })
 })
@@ -139,12 +148,12 @@ describe('scheduled progress reports', () => {
   it('works out the reporting period and waits for the scheduled time', async () => {
     expect(periodFor('MONTHLY', '2026-11-01')).toEqual({ key: 'M:2026-10', start: '2026-10-01', end: '2026-10-31' })
     expect(periodFor('WEEKLY', '2026-11-07').start).toBe('2026-10-31')
-    await prisma.scheduledReportConfig.update({ where: { id: 1 }, data: { frequency: 'MONTHLY', dayOfMonth: 1, sendAt: '09:00' } })
+    await prisma.scheduledReportConfig.update({ where: { madrasaId: fx.madrasa.id }, data: { frequency: 'MONTHLY', dayOfMonth: 1, sendAt: '09:00' } })
     // 1 Nov 2026, 08:30 in Kolkata (03:00 UTC): too early. 09:30 IST: due.
     expect((await tick(new Date('2026-11-01T03:00:00Z'))).reason).toBe('not_due')
     expect(await tick(new Date('2026-11-01T04:00:00Z'))).toMatchObject({ ran: true, period: 'M:2026-10' })
     expect((await tick(new Date('2026-11-01T05:00:00Z'))).reason).toBe('already_run')
-    await prisma.scheduledReportConfig.update({ where: { id: 1 }, data: { enabled: false } })
+    await prisma.scheduledReportConfig.update({ where: { madrasaId: fx.madrasa.id }, data: { enabled: false } })
     expect((await tick(new Date('2026-12-01T05:00:00Z'))).reason).toBe('disabled')
   })
 })

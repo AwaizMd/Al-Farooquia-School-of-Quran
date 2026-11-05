@@ -7,12 +7,17 @@ import { institutionTimezone } from './common/clock.js'
 import { logger } from './common/logger.js'
 import { prisma } from './database/prisma.js'
 import { JOBS, runTracked } from './jobs/registry.js'
+import { asOrg } from './tenancy/context.js'
 
 const boss = new PgBoss({ connectionString: env.DATABASE_URL, schema: 'pgboss' })
 boss.on('error', (err) => logger.error({ err }, 'pg-boss error'))
 
 await boss.start()
-const tz = await institutionTimezone()
+// Schedules use the organization's first madrasa timezone; each job then works out "today" per madrasa.
+const tz = await asOrg('worker start-up', async () => {
+  const first = await prisma.madrasa.findFirst({ where: { active: true }, orderBy: { createdAt: 'asc' }, select: { id: true } })
+  return institutionTimezone(first?.id)
+})
 for (const job of JOBS) {
   await boss.createQueue(job.name)
   await boss.schedule(job.name, job.cron, null, { tz })

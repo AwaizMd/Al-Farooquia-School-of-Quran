@@ -6,7 +6,7 @@ import { paymentOptions } from '../../api/payments'
 import { BankDetails, ManualPaymentForm, MethodCards, NoMethodsNotice, UpiPanel } from './PaymentMethods'
 import { METHOD_CODE } from '../../api/people'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Receipt, Printer, CheckCircle2, ShieldAlert, Loader2, Wallet, Clock } from 'lucide-react'
+import { Receipt, Printer, CheckCircle2, Loader2, Wallet, Clock } from 'lucide-react'
 import { useStore } from '../../context/DemoStore'
 import { useToast } from '../../context/ToastContext'
 import { Modal, Button, Input, Select, Textarea, Notice, EmptyState, Logo, Segmented, cx } from '../../components/ui'
@@ -127,7 +127,6 @@ export function ReceiptModal({ receipt, onClose }) {
 // Admin: record a cash/UPI/bank payment against a student's open invoices.
 export function RecordPaymentModal({ open, onClose, studentId: initialStudent, onDone }) {
   const { state, idx } = useStore()
-  const { refreshFees } = useAuth()
   const toast = useToast()
   const cur = state.settings.currency
   const [saving, setSaving] = useState(false)
@@ -184,8 +183,8 @@ export function RecordPaymentModal({ open, onClose, studentId: initialStudent, o
   )
 }
 
-// Parent: pay fees with the methods the Madarsa offers (online gateway, bank transfer, UPI QR).
-// Collects no card or bank details; online payments are confirmed by the server, manual ones by the office.
+// Parent: pay fees into the madrasa's own account (bank transfer or UPI QR), then report it.
+// Nothing is paid through this app, and a reported payment counts only once the office verifies it.
 export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
   const { state, idx } = useStore()
   const { refreshFees } = useAuth()
@@ -193,8 +192,6 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
   const fees = student ? studentFees(state, idx, student.id) : null
   const [selected, setSelected] = useState([])
   const [step, setStep] = useState('select')
-  const [receipt, setReceipt] = useState(null)
-  const [attempt, setAttempt] = useState(null)
   const [error, setError] = useState('')
   const [options, setOptions] = useState(undefined)
   const [method, setMethod] = useState(null)
@@ -203,10 +200,10 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
   useEffect(() => {
     if (!open || !student) return
     if (fees) setSelected(fees.open.map((i) => i.id))
-    setStep('select'); setReceipt(null); setAttempt(null); setError(''); setSubmitted(null); setOptions(undefined); setMethod(null)
+    setStep('select'); setError(''); setSubmitted(null); setOptions(undefined); setMethod(null)
     paymentOptions(student.uuid).then((o) => {
       setOptions(o)
-      setMethod(o.online ? 'online' : o.bank ? 'bank' : o.upi ? 'upi' : null)
+      setMethod(o.bank ? 'bank' : o.upi ? 'upi' : null)
     }, (err) => { setOptions(null); setError(err.message) })
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -214,57 +211,9 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
   const total = fees.open.filter((i) => selected.includes(i.id)).reduce((a, i) => a + i.balance, 0)
   const totalMinor = Math.round(total * 100)
   const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
-  const noMethods = options && !options.online && !options.bank && !options.upi
-  const testGateway = options?.online?.provider === 'dev'
+  const noMethods = options && !options.bank && !options.upi
 
-  // Start the online checkout: the server works out the amount from its own records.
-  const start = async () => {
-    setError('')
-    try {
-      setAttempt(await post('/payments/attempts', { studentId: student.uuid, invoiceIds: selected }))
-      setStep('confirm')
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-  const next = () => (method === 'online' ? start() : setStep('manual'))
-
-  // Wait for the server to confirm with the gateway (signed webhook or server-side payment check).
-  const waitForConfirmation = async (id) => {
-    for (let i = 0; i < 40; i++) {
-      const a = await get(`/payments/attempts/${id}`)
-      if (a.status === 'SUCCEEDED') return a
-      if (a.status === 'FAILED' || a.status === 'EXPIRED') throw new Error(a.failureReason === 'declined' ? 'The payment was declined. Nothing was charged.' : 'The payment did not complete.')
-      await new Promise((r) => setTimeout(r, 1500))
-    }
-    throw new Error('We have not received confirmation yet. If money was taken it will appear shortly; please do not pay again.')
-  }
-
-  const finish = async (a) => {
-    await refreshFees()
-    setReceipt({ no: a.receiptNo, total: a.amountMinor / 100 })
-    setStep('done')
-    onDone?.(a.receiptNo)
-  }
-
-  const pay = async () => {
-    setStep('processing')
-    setError('')
-    try {
-      if (attempt.checkout.kind === 'dev') {
-        // Development gateway: the server plays the gateway and sends itself a signed confirmation.
-        await post(`/payments/dev/attempts/${attempt.id}/complete`, { outcome: 'success' })
-      } else if (attempt.checkout.kind === 'razorpay') {
-        const r = await openRazorpay(attempt.checkout, student.name)
-        // The server checks the signature and asks Razorpay itself; the browser's word is not enough.
-        await post(`/payments/attempts/${attempt.id}/verify`, { orderId: r.razorpay_order_id, paymentId: r.razorpay_payment_id, signature: r.razorpay_signature }).catch(() => {})
-      }
-      await finish(await waitForConfirmation(attempt.id))
-    } catch (err) {
-      setError(err.message)
-      setStep('confirm')
-    }
-  }
+  const next = () => setStep('manual')
 
   const manualSubmitted = (s) => {
     setSubmitted(s)
@@ -273,15 +222,12 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
   }
 
   return (
-    <Modal open={open} onClose={step === 'processing' ? undefined : onClose} title={t('Pay fees')} subtitle={student.name}
+    <Modal open={open} onClose={onClose} title={t('Pay fees')} subtitle={student.name}
       footer={step === 'select' ? (
         <><Button variant="secondary" onClick={onClose}>{t('Cancel')}</Button><Button onClick={next} disabled={!total || !method}>Continue · {money(total, cur)}</Button></>
-      ) : step === 'confirm' ? (
-        <><Button variant="secondary" onClick={() => setStep('select')}>{t('Back')}</Button><Button variant="gold" icon={CheckCircle2} onClick={pay}>{t(attempt?.checkout.kind === 'dev' ? 'Pay (test gateway)' : 'Pay now')}</Button></>
       ) : step === 'manual' ? <Button variant="secondary" onClick={() => setStep('select')}>{t('Back')}</Button>
-        : step === 'done' || step === 'submitted' ? <Button onClick={onClose}>{t('Done')}</Button> : null}>
+        : step === 'submitted' ? <Button onClick={onClose}>{t('Done')}</Button> : null}>
       {noMethods && <div className="mb-4"><NoMethodsNotice /></div>}
-      {testGateway && method === 'online' && step !== 'manual' && <Notice tone="gold" icon={ShieldAlert} className="mb-4"><b>{t('Test gateway.')}</b> {t('No real money moves. The payment is confirmed the same way a real gateway confirms it.')}</Notice>}
       {error && <Notice tone="red" className="mb-4">{error}</Notice>}
       <AnimatePresence mode="wait">
         {step === 'select' && (
@@ -306,7 +252,6 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
               <div className="mt-4">
                 <p className="label">{t('How would you like to pay?')}</p>
                 <MethodCards options={options} value={method} onChange={setMethod} />
-                {method === 'online' && <p className="mt-3 text-[12.5px] text-ink-muted">{t('You choose UPI, card or net banking on the secure payment page. This app never sees your card or bank details.')}</p>}
               </div>
             )}
           </motion.div>
@@ -328,31 +273,6 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
             </div>
           </motion.div>
         )}
-        {step === 'confirm' && (
-          <motion.div key="c" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-3">
-            <div className="rounded-2xl border border-line p-4">
-              <p className="text-[13px] text-ink-muted">{t('Amount to pay')}</p>
-              <p className="mt-1 text-[28px] font-extrabold text-forest tabular">{money((attempt?.amountMinor ?? 0) / 100, cur)}</p>
-              <p className="text-[13px] text-ink-muted">{t('for')} {selected.length} {t('invoice')}{selected.length > 1 ? 's' : ''} · {t('Reference')} {attempt?.reference}</p>
-            </div>
-            <p className="text-[12.5px] text-ink-muted">{t('Your fees are marked paid only when the payment gateway confirms the payment to the Madarsa.')}</p>
-          </motion.div>
-        )}
-        {step === 'processing' && (
-          <motion.div key="p" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-10 text-center">
-            <Loader2 size={36} className="animate-spin text-primary-600" />
-            <p className="mt-3 font-bold text-forest">{t('Waiting for payment confirmation…')}</p>
-            <p className="text-[13px] text-ink-muted">{t('Please keep this window open.')}</p>
-          </motion.div>
-        )}
-        {step === 'done' && receipt && (
-          <motion.div key="d" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-6 text-center">
-            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600"><CheckCircle2 size={34} /></span>
-            <p className="mt-3 text-[18px] font-extrabold text-forest">{t('Payment received')}</p>
-            <p className="text-[13.5px] text-ink-muted">{money(receipt.total, cur)} · Receipt {receipt.no}</p>
-            <p className="mt-3 max-w-xs text-[12.5px] text-ink-muted">{t('Confirmed by the payment gateway. Your balance and receipts are updated.')}</p>
-          </motion.div>
-        )}
         {step === 'submitted' && submitted && (
           <motion.div key="sub" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-6 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gold-50 text-gold-700"><Clock size={32} /></span>
@@ -364,19 +284,4 @@ export function CheckoutModal({ open, onClose, student, onDone, onSubmitted }) {
       </AnimatePresence>
     </Modal>
   )
-}
-
-// Opens Razorpay's hosted checkout and resolves with the ids and signature it returns.
-// The payment still counts only after the server verifies it with Razorpay.
-function openRazorpay(checkout, name) {
-  return new Promise((resolve, reject) => {
-    const launch = () => {
-      const rzp = new window.Razorpay({ key: checkout.keyId, order_id: checkout.orderId, amount: checkout.amount, currency: checkout.currency, name, description: checkout.description, handler: (response) => resolve(response), modal: { ondismiss: () => reject(new Error('Payment was cancelled.')) } })
-      rzp.on('payment.failed', () => reject(new Error('The payment was declined. Nothing was charged.')))
-      rzp.open()
-    }
-    if (window.Razorpay) return launch()
-    const s = Object.assign(document.createElement('script'), { src: 'https://checkout.razorpay.com/v1/checkout.js', onload: launch, onerror: () => reject(new Error('Could not load the payment page. Check your connection.')) })
-    document.body.appendChild(s)
-  })
 }

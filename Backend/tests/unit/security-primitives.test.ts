@@ -69,12 +69,12 @@ describe('role policy', () => {
     expect(p.has('users.manage')).toBe(false)
   })
   it('combines permissions for multi-role accounts', () => {
-    expect(permissionsFor(['MENTOR', 'ADMIN']).has('mfa.reset')).toBe(true)
+    expect(permissionsFor(['MENTOR', 'MADRASA_ADMIN']).has('mfa.reset')).toBe(true)
     expect([...permissionsFor(['PARENT', 'WARDEN'])].sort()).toEqual(['hostel.manage', 'hostel.read'])
   })
   it('uses staff timeouts when any role is staff', () => {
     expect(timeoutsFor('FULL', ['PARENT'])).toEqual({ idleSec: 86400, absoluteSec: 30 * 86400 })
     expect(timeoutsFor('FULL', ['PARENT', 'MENTOR'])).toEqual({ idleSec: 1800, absoluteSec: 12 * 3600 })
-    expect(timeoutsFor('PRE_MFA', ['ADMIN']).absoluteSec).toBe(300)
+    expect(timeoutsFor('PRE_MFA', ['MADRASA_ADMIN']).absoluteSec).toBe(300)
   })
 })

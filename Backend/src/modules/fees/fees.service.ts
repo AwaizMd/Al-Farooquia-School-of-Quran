@@ -1,15 +1,17 @@
 import type { Request } from 'express'
+import { lockRow } from '../../tenancy/locks.js'
 import type { Prisma } from '../../generated/prisma/client.js'
 import type { AdjustmentKind, PaymentMethod, PaymentSource } from '../../generated/prisma/enums.js'
-import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
+import { AppError, conflict, notFound } from '../../common/errors.js'
 import { addDaysIso, institutionToday } from '../../common/clock.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import type { AuthContext } from '../../types/express.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
+import { activeMadrasaId } from '../../tenancy/context.js'
+import { madrasaProfile } from '../../tenancy/settings.js'
 
-type Tx = Prisma.TransactionClient
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
@@ -51,14 +53,16 @@ export function invoiceView(i: InvoiceRow, today: string) {
 }
 
 /** Open (unpaid) invoices of a student, oldest due first — the order payments are applied in. */
+// Oldest billing period first. Not by due date: an invoice issued late gets extra days to
+// pay, so its due date can fall after a newer month's.
 async function openInvoices(tx: Tx, studentId: string, today: string, only?: string[]) {
-  const rows = await tx.invoice.findMany({ where: { studentId, status: 'ISSUED', ...(only ? { id: { in: only } } : {}) }, include: BALANCE_INCLUDE, orderBy: [{ dueDate: 'asc' }, { period: 'asc' }] })
+  const rows = await tx.invoice.findMany({ where: { studentId, status: 'ISSUED', ...(only ? { id: { in: only } } : {}) }, include: BALANCE_INCLUDE, orderBy: [{ period: 'asc' }, { dueDate: 'asc' }] })
   return rows.map((r) => invoiceView(r, today)).filter((v) => v.balanceMinor > 0)
 }
 
 export async function studentFees(req: Request, ref: string) {
   const scope = feeScope(req.auth!)
-  const s = scope && (await prisma.student.findFirst({ where: { AND: [scope, UUID.test(ref) ? { id: ref } : { admissionNo: ref }] }, select: { id: true, admissionNo: true, name: true } }))
+  const s = scope && (await prisma.student.findFirst({ where: { AND: [scope, UUID.test(ref) ? { id: ref } : { admissionNo: ref }] }, select: { id: true, admissionNo: true, name: true, madrasaId: true } }))
   if (!s) throw notFound()
   const today = await institutionToday()
   const [invoices, payments] = await Promise.all([
@@ -66,9 +70,10 @@ export async function studentFees(req: Request, ref: string) {
     prisma.payment.findMany({ where: { studentId: s.id }, include: { receipt: true, allocations: { include: { invoice: { select: { number: true, period: true } } } }, refunds: { include: { allocations: true } } }, orderBy: { createdAt: 'desc' } }),
   ])
   const views = invoices.map((i) => invoiceView(i, today))
+  const { madrasaId, ...student } = s
   return {
-    student: s,
-    currency: views[0]?.currency ?? (await prisma.institutionSettings.findUnique({ where: { id: 1 } }))?.currency ?? 'INR',
+    student,
+    currency: views[0]?.currency ?? (await madrasaProfile(madrasaId)).currency,
     totals: {
       dueMinor: views.reduce((a, v) => a + v.dueMinor, 0),
       paidMinor: views.reduce((a, v) => a + v.paidMinor, 0),
@@ -103,7 +108,7 @@ export async function listFees(req: Request) {
   return {
     currency: invoices[0]?.currency ?? 'INR',
     invoices: invoices.map((i) => invoiceView(i, today)),
-    payments: payments.map((p) => ({ ...paymentView(p), admissionNo: p.student.admissionNo, recordedBy: p.recordedById ? recorders.get(p.recordedById) ?? 'Office' : 'Online payment' })),
+    payments: payments.map((p) => ({ ...paymentView(p), admissionNo: p.student.admissionNo, recordedBy: p.recordedById ? recorders.get(p.recordedById) ?? 'Office' : 'Office' })),
   }
 }
 
@@ -112,14 +117,19 @@ export async function listFees(req: Request) {
 /** Financial year (April–March) a date falls in, named by its starting year. */
 export const fiscalYearOf = (iso: string) => (Number(iso.slice(5, 7)) >= 4 ? Number(iso.slice(0, 4)) : Number(iso.slice(0, 4)) - 1)
 
-/** Next receipt number. The counter row is updated inside the caller's transaction, so numbers are gapless. */
+/**
+ * Next receipt number in the active madrasa's series (<prefix>-<financial year>-<n>).
+ * The counter row is updated inside the caller's transaction, so numbers are gapless.
+ */
 async function nextReceiptNumber(tx: Tx, today: string) {
+  const madrasaId = activeMadrasaId()
+  const { config } = await madrasaProfile(madrasaId)
   const fy = fiscalYearOf(today)
   const [row] = await tx.$queryRaw<{ last: number }[]>`
-    INSERT INTO receipt_sequences ("fiscalYear", "last") VALUES (${fy}, 1)
-    ON CONFLICT ("fiscalYear") DO UPDATE SET "last" = receipt_sequences."last" + 1
+    INSERT INTO receipt_sequences ("madrasaId", "fiscalYear", "last") VALUES (${madrasaId}::uuid, ${fy}, 1)
+    ON CONFLICT ("madrasaId", "fiscalYear") DO UPDATE SET "last" = receipt_sequences."last" + 1
     RETURNING "last"`
-  return `NR-${fy}-${String(row!.last).padStart(4, '0')}`
+  return `${config.receipts.prefix}-${fy}-${String(row!.last).padStart(4, '0')}`
 }
 
 // ---------- Recording money ----------
@@ -133,10 +143,9 @@ export interface Receive {
   note?: string | null | undefined
   invoiceIds?: string[] | undefined
   recordedById?: string | null | undefined
-  paymentAttemptId?: string | undefined
-  /** UTR / bank reference or gateway payment id (unique across payments). */
+  /** UTR / cheque number / bank reference (unique within the madrasa). */
   reference?: string | undefined
-  /** Online money already taken: record it even if it exceeds the current balance (excess left unallocated for review). */
+  /** Money already in the bank: record it even if it exceeds the current balance (excess left unallocated for review). */
   allowUnallocated?: boolean | undefined
 }
 
@@ -146,7 +155,7 @@ export interface Receive {
  * for the same student can never allocate the same balance twice.
  */
 export async function receive(tx: Tx, r: Receive, today: string) {
-  await tx.$queryRaw`SELECT id FROM students WHERE id = ${r.studentId}::uuid FOR UPDATE`
+  if (!(await lockRow(tx, 'students', r.studentId))) throw notFound()
   const open = await openInvoices(tx, r.studentId, today, r.invoiceIds)
   const balance = open.reduce((a, i) => a + i.balanceMinor, 0)
   if (r.amountMinor > balance && !r.allowUnallocated) {
@@ -165,7 +174,7 @@ export async function receive(tx: Tx, r: Receive, today: string) {
   const payment = await tx.payment.create({
     data: {
       studentId: r.studentId, receiptId: receipt.id, amountMinor: r.amountMinor, unallocatedMinor: left, currency, method: r.method, source: r.source,
-      receivedOn: toDate(r.receivedOn), recordedById: r.recordedById ?? null, note: r.note?.trim() || null, paymentAttemptId: r.paymentAttemptId ?? null, reference: r.reference ?? null,
+      receivedOn: toDate(r.receivedOn), recordedById: r.recordedById ?? null, note: r.note?.trim() || null, reference: r.reference ?? null,
       allocations: { create: allocations },
     },
     include: { receipt: true, allocations: { include: { invoice: { select: { number: true, period: true } } } }, refunds: { include: { allocations: true } } },
@@ -173,7 +182,7 @@ export async function receive(tx: Tx, r: Receive, today: string) {
   return payment
 }
 
-export async function recordManualPayment(req: Request, input: { studentId: string; amountMinor: number; method: Exclude<PaymentMethod, 'ONLINE'>; receivedOn?: string | undefined; note?: string | undefined; invoiceIds?: string[] | undefined }) {
+export async function recordManualPayment(req: Request, input: { studentId: string; amountMinor: number; method: PaymentMethod; receivedOn?: string | undefined; note?: string | undefined; invoiceIds?: string[] | undefined }) {
   const today = await institutionToday()
   const receivedOn = input.receivedOn ?? today
   if (receivedOn > today) throw new AppError(422, 'VALIDATION_FAILED', 'Some fields are invalid.', [{ path: 'receivedOn', message: 'The payment date cannot be in the future.' }])
@@ -200,8 +209,7 @@ export const discountFor = (grossMinor: number, percent: number) => (percent >= 
 export async function issueInvoices(actor: Request | null, period: string, onlyStudentId?: string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new AppError(422, 'VALIDATION_FAILED', 'Use a period like 2026-10.')
   const today = await institutionToday()
-  const settings = await prisma.institutionSettings.findUnique({ where: { id: 1 } })
-  const dueDay = String(settings?.feeDueDay ?? 10).padStart(2, '0')
+  const dueDay = String((await madrasaProfile()).feeDueDay).padStart(2, '0')
   // Anyone admitted by the last day of the period is billed for it (day 0 of the next month).
   const [y, m] = period.split('-').map(Number)
   const periodEnd = new Date(Date.UTC(y!, m!, 0))
@@ -244,7 +252,7 @@ export async function adjustInvoice(req: Request, invoiceId: string, input: { am
   return prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { studentId: true, number: true } })
     if (!inv) throw notFound()
-    await tx.$queryRaw`SELECT id FROM students WHERE id = ${inv.studentId}::uuid FOR UPDATE`
+    await lockRow(tx, 'students', inv.studentId)
     const [view] = (await tx.invoice.findMany({ where: { id: invoiceId }, include: BALANCE_INCLUDE })).map((i) => invoiceView(i, today))
     if (view!.status === 'VOID') throw conflict('INVOICE_VOID', 'This invoice is void.')
     if (input.amountMinor > view!.balanceMinor) throw new AppError(409, 'ADJUSTMENT_TOO_LARGE', 'An adjustment cannot exceed the outstanding balance.', { balanceMinor: view!.balanceMinor })
@@ -271,17 +279,14 @@ export async function voidInvoice(req: Request, invoiceId: string, reason: strin
  * Refund part or all of a payment. Unallocated money is refunded first, then the
  * most recent invoice allocations, whose balances become due again.
  */
-export async function refundPayment(req: Request, paymentId: string, input: { amountMinor: number; reason: string }, providerRefund?: (providerPaymentId: string, amountMinor: number) => Promise<{ status: 'COMPLETED' | 'PENDING' | 'FAILED'; providerRef?: string | undefined }>) {
-  const found = await prisma.payment.findUnique({ where: { id: paymentId }, include: { attempt: true } })
+export async function refundPayment(req: Request, paymentId: string, input: { amountMinor: number; reason: string }) {
+  const found = await prisma.payment.findUnique({ where: { id: paymentId } })
   if (!found) throw notFound()
-  const online = found.source === 'ONLINE'
-  const providerPaymentId = found.attempt?.providerPaymentId
-  if (online && (!providerRefund || !providerPaymentId)) throw conflict('REFUND_UNAVAILABLE', 'This online payment cannot be refunded automatically. Refund it from the gateway dashboard and record it here.')
 
   // Check and reserve the refund under the student lock, re-reading the payment there,
   // so concurrent refunds can never add up to more than the payment.
   const refund = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM students WHERE id = ${found.studentId}::uuid FOR UPDATE`
+    await lockRow(tx, 'students', found.studentId)
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { allocations: { include: { invoice: { select: { dueDate: true } } } }, refunds: { include: { allocations: true } } } })
     const refunded = payment.refunds.filter((r) => r.status !== 'FAILED').reduce((a, r) => a + r.amountMinor, 0)
     if (input.amountMinor > payment.amountMinor - refunded) throw new AppError(409, 'REFUND_TOO_LARGE', 'The refund is more than what remains of this payment.', { refundableMinor: payment.amountMinor - refunded })
@@ -298,33 +303,11 @@ export async function refundPayment(req: Request, paymentId: string, input: { am
       if (take > 0) parts.push({ invoiceId: a.invoiceId, amountMinor: take })
       left -= take
     }
-    // Online refunds stay PENDING (reserved) until the gateway answers.
-    const r = await tx.refund.create({ data: { paymentId, amountMinor: input.amountMinor, reason: input.reason, status: online ? 'PENDING' : 'COMPLETED', createdById: req.auth!.user.id, allocations: { create: parts } } })
-    if (!online) await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (completed) — ${input.reason}`, entityType: 'student', entityId: payment.studentId, metadata: { paymentId, refundId: r.id } }, req, tx)
+    // The office hands the money back (cash, cheque or bank transfer), so the refund is complete when recorded.
+    const r = await tx.refund.create({ data: { paymentId, amountMinor: input.amountMinor, reason: input.reason, status: 'COMPLETED', createdById: req.auth!.user.id, allocations: { create: parts } } })
+    await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (completed) — ${input.reason}`, entityType: 'student', entityId: payment.studentId, metadata: { paymentId, refundId: r.id } }, req, tx)
     return r
   })
-  if (!online) return { id: refund.id, status: refund.status, amountMinor: refund.amountMinor }
-
-  let status: 'COMPLETED' | 'PENDING' | 'FAILED'
-  try {
-    const r = await providerRefund!(providerPaymentId!, input.amountMinor)
-    status = r.status
-    if (status === 'FAILED') {
-      // Release the reservation: the balance goes back to what it was.
-      await prisma.$transaction([prisma.refundAllocation.deleteMany({ where: { refundId: refund.id } }), prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } })])
-    } else {
-      await prisma.refund.update({ where: { id: refund.id }, data: { status, providerRef: r.providerRef ?? null } })
-    }
-  } catch (err) {
-    // Unknown outcome (e.g. the gateway timed out): keep it PENDING for the office to check.
-    await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} sent to the gateway with no answer; check the gateway dashboard — ${input.reason}`, entityType: 'student', entityId: found.studentId, metadata: { paymentId, refundId: refund.id } }, req)
-    throw err
-  }
-  await audit({ action: 'fees.refund', summary: `Refund of ${(input.amountMinor / 100).toFixed(2)} (${status.toLowerCase()}) — ${input.reason}`, entityType: 'student', entityId: found.studentId, metadata: { paymentId, refundId: refund.id } }, req)
-  if (status === 'FAILED') throw new AppError(502, 'REFUND_FAILED', 'The payment gateway declined the refund. Nothing was changed.')
-  return { id: refund.id, status, amountMinor: refund.amountMinor }
+  return { id: refund.id, status: refund.status, amountMinor: refund.amountMinor }
 }
 
-export function assertCanPay(auth: AuthContext) {
-  if (!auth.roles.includes('PARENT')) throw forbidden('Only a linked guardian can pay online.')
-}

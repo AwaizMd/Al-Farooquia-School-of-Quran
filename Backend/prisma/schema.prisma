@@ -16,27 +16,167 @@ datasource db {
 // Institution
 // ---------------------------------------------------------------------------
 
-/// Single-institution deployment: exactly one row, id = 1.
+/// Deprecated by CR-01 (copied into organizations + madrasa_settings). Kept read-only, not used by the code.
 model InstitutionSettings {
-  id              Int              @id @default(1)
-  brandName       String
-  shortName       String
-  brandArabic     String
-  tagline         String
-  address         String
-  phone           String
-  email           String
+  id          Int      @id @default(1)
+  brandName   String
+  shortName   String
+  brandArabic String
+  tagline     String
+  address     String
+  phone       String
+  email       String
   /// ISO 4217 code. Money is stored in minor units of this currency.
-  currency        String           @db.Char(3)
+  currency    String   @db.Char(3)
   /// IANA timezone used to decide "today", due dates and job schedules.
-  timezone        String
+  timezone    String
   /// 0 = Sunday … 6 = Saturday
-  weeklyOff       Int              @db.SmallInt
-  feeDueDay       Int              @db.SmallInt
-  updatedAt       DateTime         @updatedAt
-  paymentSettings PaymentSettings?
+  weeklyOff   Int      @db.SmallInt
+  feeDueDay   Int      @db.SmallInt
+  updatedAt   DateTime @updatedAt
 
   @@map("institution_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Organization and madrasas (CR-01)
+// ---------------------------------------------------------------------------
+
+/// The trust that runs the madrasas. Exactly one row, id = 1.
+model Organization {
+  id         Int       @id @default(1)
+  name       String
+  shortName  String
+  nameArabic String
+  tagline    String
+  address    String
+  phone      String
+  email      String
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  madrasas   Madrasa[]
+
+  @@map("organizations")
+}
+
+/// One campus. Every campus record carries its madrasaId.
+model Madrasa {
+  id                       String                    @id @default(uuid()) @db.Uuid
+  organizationId           Int                       @default(1)
+  /// Short, unique, upper-case (e.g. "MAIN", "HYD2").
+  code                     String                    @unique
+  name                     String
+  shortName                String
+  nameArabic               String?
+  address                  String
+  phone                    String
+  email                    String
+  active                   Boolean                   @default(true)
+  createdAt                DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime                  @updatedAt @db.Timestamptz(3)
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  settings                 MadrasaSettings?
+  features                 MadrasaFeature[]
+  memberships              MadrasaMembership[]
+  groups                   Group[]
+  staffProfiles            StaffProfile[]
+  groupMentorAssignments   GroupMentorAssignment[]
+  students                 Student[]
+  studentGuardians         StudentGuardian[]
+  groupEnrollments         GroupEnrollment[]
+  attendanceSessions       AttendanceSession[]
+  attendanceRecords        AttendanceRecord[]
+  attendanceCorrections    AttendanceCorrection[]
+  learningRecords          LearningRecord[]
+  learningRecordRevisions  LearningRecordRevision[]
+  gradingScales            GradingScale[]
+  gradeBands               GradeBand[]
+  exams                    Exam[]
+  examGroups               ExamGroup[]
+  examSubjects             ExamSubject[]
+  examResults              ExamResult[]
+  examMarks                ExamMark[]
+  feePlans                 FeePlan[]
+  invoices                 Invoice[]
+  payments                 Payment[]
+  paymentAllocations       PaymentAllocation[]
+  receipts                 Receipt[]
+  receiptSequences         ReceiptSequence[]
+  feeAdjustments           FeeAdjustment[]
+  refunds                  Refund[]
+  refundAllocations        RefundAllocation[]
+  concessions              Concession[]
+  hostelRooms              HostelRoom[]
+  hostelBeds               HostelBed[]
+  bedAssignments           BedAssignment[]
+  hostelRollEntrys         HostelRollEntry[]
+  reminderRules            ReminderRule[]
+  messageTemplates         MessageTemplate[]
+  scheduledReportConfigs   ScheduledReportConfig[]
+  reportRuns               ReportRun[]
+  paymentSettingss         PaymentSettings[]
+  manualPaymentSubmissions ManualPaymentSubmission[]
+
+  @@map("madrasas")
+}
+
+/// Per-madrasa configuration. Typed columns for what queries depend on; the rest in
+/// `config`, validated by the Zod schema in src/tenancy/settings.ts.
+model MadrasaSettings {
+  madrasaId String   @id @db.Uuid
+  /// ISO 4217 code. Money is stored in minor units of this currency.
+  currency  String   @db.Char(3)
+  /// IANA timezone used to decide "today", due dates and job schedules.
+  timezone  String
+  /// 0 = Sunday … 6 = Saturday
+  weeklyOff Int      @db.SmallInt
+  feeDueDay Int      @db.SmallInt
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  madrasa   Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Cascade)
+
+  @@map("madrasa_settings")
+}
+
+enum Feature {
+  HOSTEL
+  FEES
+  ACCOUNTS
+  NAMAZ_TRACKING
+  STAFF_ATTENDANCE
+  ASSESSMENTS
+  SCHEDULED_REPORTS
+  BIOMETRIC
+}
+
+model MadrasaFeature {
+  madrasaId String   @db.Uuid
+  feature   Feature
+  enabled   Boolean
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  madrasa   Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Cascade)
+
+  @@id([madrasaId, feature])
+  @@map("madrasa_features")
+}
+
+/// A role held in one madrasa. Org roles for chosen madrasas (Committee, CA) are rows here too.
+model MadrasaMembership {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  madrasaId   String    @db.Uuid
+  role        Role
+  active      Boolean   @default(true)
+  /// Access ends at this time (e.g. a CA engaged for one audit).
+  expiresAt   DateTime? @db.Timestamptz(3)
+  grantedById String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  user        User      @relation("MembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  madrasa     Madrasa   @relation(fields: [madrasaId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, madrasaId, role])
+  @@index([madrasaId, role])
+  @@map("madrasa_memberships")
 }
 
 // ---------------------------------------------------------------------------
@@ -44,8 +184,15 @@ model InstitutionSettings {
 // ---------------------------------------------------------------------------
 
 enum Role {
-  ADMIN
+  /// Organization-wide: manages madrasas and acts as madrasa admin in all of them.
+  SUPER_ADMIN
+  MADRASA_ADMIN
   PRINCIPAL
+  /// Read-only analytics for assigned madrasas.
+  COMMITTEE_MEMBER
+  /// Chartered accountant: read-only accounts for assigned madrasas.
+  CA
+  ACCOUNTANT
   MENTOR
   STUDENT
   PARENT
@@ -75,6 +222,8 @@ model User {
   locale             String     @default("en")
   /// Set by an MFA reset: sign-in is blocked until the recovery flow completes.
   mfaRecoveryPending Boolean    @default(false)
+  /// The madrasa where the account was created: it can manage the account even before any role or record links it there.
+  homeMadrasaId      String?    @db.Uuid
   createdAt          DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime   @updatedAt @db.Timestamptz(3)
 
@@ -85,15 +234,18 @@ model User {
   recoveryCodes     RecoveryCode[]
   recoveryRequests  MfaRecoveryRequest[]     @relation("RecoveryFor")
   recoveryInitiated MfaRecoveryRequest[]     @relation("RecoveryInitiatedBy")
-  staffProfile      StaffProfile?
+  staffProfiles     StaffProfile[]
   guardianProfile   Guardian?
   studentProfile    Student?
   notifications     Notification[]
   notificationPrefs NotificationPreference[]
 
+  memberships MadrasaMembership[] @relation("MembershipUser")
+
   @@map("users")
 }
 
+/// Roles not tied to one madrasa: SUPER_ADMIN, PARENT, STUDENT. Madrasa roles live in madrasa_memberships.
 model UserRole {
   userId    String   @db.Uuid
   role      Role
@@ -275,9 +427,12 @@ enum GroupGender {
 
 /// A halqa / class.
 model Group {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String      @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "groups_madrasa_id_fkey")
   id        String      @id @default(uuid()) @db.Uuid
   /// Stable human-readable reference, e.g. "g-hifz-a".
-  code      String      @unique
+  code      String
   name      String
   short     String
   track     Track
@@ -293,6 +448,8 @@ model Group {
   attendanceSessions AttendanceSession[]
   exams              ExamGroup[]
 
+  @@unique([madrasaId, code])
+  @@index([madrasaId])
   @@map("groups")
 }
 
@@ -303,9 +460,12 @@ enum StaffStatus {
 
 /// Staff member (mentor, principal, warden). Optionally linked to a sign-in account.
 model StaffProfile {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId      String      @default(dbgenerated()) @db.Uuid
+  madrasa        Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_profiles_madrasa_id_fkey")
   id             String      @id @default(uuid()) @db.Uuid
-  code           String      @unique
-  userId         String?     @unique @db.Uuid
+  code           String
+  userId         String?     @db.Uuid
   displayName    String
   title          String
   phone          String?
@@ -322,12 +482,18 @@ model StaffProfile {
   learningRecords LearningRecord[]
   examsExamined   Exam[]
 
+  @@unique([madrasaId, code])
+  @@unique([madrasaId, userId])
+  @@index([madrasaId])
   @@map("staff_profiles")
 }
 
 /// Who teaches a halqa, with history. One open (endedAt null) row per group,
 /// enforced by a partial unique index in the migration.
 model GroupMentorAssignment {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String       @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "group_mentor_assignments_madrasa_id_fkey")
   id        String       @id @default(uuid()) @db.Uuid
   groupId   String       @db.Uuid
   staffId   String       @db.Uuid
@@ -338,6 +504,7 @@ model GroupMentorAssignment {
 
   @@index([staffId, endedAt])
   @@index([groupId, endedAt])
+  @@index([madrasaId])
   @@map("group_mentor_assignments")
 }
 
@@ -366,9 +533,12 @@ enum StudentStatus {
 }
 
 model Student {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId       String                    @default(dbgenerated()) @db.Uuid
+  madrasa         Madrasa                   @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "students_madrasa_id_fkey")
   id              String                    @id @default(uuid()) @db.Uuid
   /// Institution-assigned, unique, never reused. Also the student's sign-in name.
-  admissionNo     String                    @unique
+  admissionNo     String
   userId          String?                   @unique @db.Uuid
   name            String
   gender          Gender
@@ -395,17 +565,21 @@ model Student {
   examResults     ExamResult[]
   invoices        Invoice[]
   payments        Payment[]
-  paymentAttempts PaymentAttempt[]
   manualPayments  ManualPaymentSubmission[]
   bedAssignments  BedAssignment[]
   hostelRoll      HostelRollEntry[]
 
+  @@unique([madrasaId, admissionNo])
   @@index([groupId, status])
   @@index([name])
+  @@index([madrasaId])
   @@map("students")
 }
 
 model StudentGuardian {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId             String   @default(dbgenerated()) @db.Uuid
+  madrasa               Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "student_guardians_madrasa_id_fkey")
   studentId             String   @db.Uuid
   guardianId            String   @db.Uuid
   isPrimary             Boolean  @default(false)
@@ -418,11 +592,15 @@ model StudentGuardian {
 
   @@id([studentId, guardianId])
   @@index([guardianId])
+  @@index([madrasaId])
   @@map("student_guardians")
 }
 
 /// Group membership history (current = endedOn null).
 model GroupEnrollment {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String    @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa   @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "group_enrollments_madrasa_id_fkey")
   id        String    @id @default(uuid()) @db.Uuid
   studentId String    @db.Uuid
   groupId   String    @db.Uuid
@@ -432,6 +610,7 @@ model GroupEnrollment {
   group     Group     @relation(fields: [groupId], references: [id], onDelete: Restrict)
 
   @@index([studentId])
+  @@index([madrasaId])
   @@map("group_enrollments")
 }
 
@@ -448,6 +627,9 @@ enum AttendanceStatus {
 
 /// One register per halqa per day. A day with no session has simply not been marked yet.
 model AttendanceSession {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String             @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa            @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "attendance_sessions_madrasa_id_fkey")
   id         String             @id @default(uuid()) @db.Uuid
   groupId    String             @db.Uuid
   date       DateTime           @db.Date
@@ -459,10 +641,14 @@ model AttendanceSession {
 
   @@unique([groupId, date])
   @@index([date])
+  @@index([madrasaId])
   @@map("attendance_sessions")
 }
 
 model AttendanceRecord {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String                 @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa                @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "attendance_records_madrasa_id_fkey")
   id          String                 @id @default(uuid()) @db.Uuid
   sessionId   String                 @db.Uuid
   studentId   String                 @db.Uuid
@@ -478,11 +664,15 @@ model AttendanceRecord {
 
   @@unique([studentId, date])
   @@unique([sessionId, studentId])
+  @@index([madrasaId])
   @@map("attendance_records")
 }
 
 /// Every change to a saved status, with who, when and (after the day) why.
 model AttendanceCorrection {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId     String           @default(dbgenerated()) @db.Uuid
+  madrasa       Madrasa          @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "attendance_corrections_madrasa_id_fkey")
   id            String           @id @default(uuid()) @db.Uuid
   recordId      String           @db.Uuid
   fromStatus    AttendanceStatus
@@ -493,6 +683,7 @@ model AttendanceCorrection {
   record        AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 
   @@index([recordId])
+  @@index([madrasaId])
   @@map("attendance_corrections")
 }
 
@@ -528,6 +719,9 @@ enum TargetStatus {
 
 /// One lesson assessment. Records are never overwritten: edits keep a revision.
 model LearningRecord {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId       String                   @default(dbgenerated()) @db.Uuid
+  madrasa         Madrasa                  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "learning_records_madrasa_id_fkey")
   id              String                   @id @default(uuid()) @db.Uuid
   studentId       String                   @db.Uuid
   /// Mentor who taught the lesson (null if recorded by administration).
@@ -559,10 +753,14 @@ model LearningRecord {
 
   @@index([studentId, date(sort: Desc)])
   @@index([date])
+  @@index([madrasaId])
   @@map("learning_records")
 }
 
 model LearningRecordRevision {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String         @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa        @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "learning_record_revisions_madrasa_id_fkey")
   id         String         @id @default(uuid()) @db.Uuid
   recordId   String         @db.Uuid
   /// The record as it was before this edit.
@@ -573,6 +771,7 @@ model LearningRecordRevision {
   record     LearningRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 
   @@index([recordId])
+  @@index([madrasaId])
   @@map("learning_record_revisions")
 }
 
@@ -583,18 +782,26 @@ model LearningRecordRevision {
 /// Versioned grading scale. Editing creates a new version; published exams
 /// keep the version they were graded with.
 model GradingScale {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String      @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "grading_scales_madrasa_id_fkey")
   id          String      @id @default(uuid()) @db.Uuid
-  version     Int         @unique
+  version     Int
   active      Boolean     @default(false)
   createdById String?     @db.Uuid
   createdAt   DateTime    @default(now()) @db.Timestamptz(3)
   bands       GradeBand[]
   exams       Exam[]
 
+  @@unique([madrasaId, version])
+  @@index([madrasaId])
   @@map("grading_scales")
 }
 
 model GradeBand {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String       @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "grade_bands_madrasa_id_fkey")
   id         String       @id @default(uuid()) @db.Uuid
   scaleId    String       @db.Uuid
   grade      String
@@ -604,6 +811,7 @@ model GradeBand {
   scale      GradingScale @relation(fields: [scaleId], references: [id], onDelete: Cascade)
 
   @@unique([scaleId, minPercent])
+  @@index([madrasaId])
   @@map("grade_bands")
 }
 
@@ -615,8 +823,11 @@ enum ExamStatus {
 }
 
 model Exam {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId      String        @default(dbgenerated()) @db.Uuid
+  madrasa        Madrasa       @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "exams_madrasa_id_fkey")
   id             String        @id @default(uuid()) @db.Uuid
-  code           String        @unique
+  code           String
   title          String
   type           String
   track          Track
@@ -635,34 +846,47 @@ model Exam {
   subjects       ExamSubject[]
   results        ExamResult[]
 
+  @@unique([madrasaId, code])
   @@index([date])
+  @@index([madrasaId])
   @@map("exams")
 }
 
 model ExamGroup {
-  examId  String @db.Uuid
-  groupId String @db.Uuid
-  exam    Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String  @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "exam_groups_madrasa_id_fkey")
+  examId    String  @db.Uuid
+  groupId   String  @db.Uuid
+  exam      Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  group     Group   @relation(fields: [groupId], references: [id], onDelete: Restrict)
 
   @@id([examId, groupId])
+  @@index([madrasaId])
   @@map("exam_groups")
 }
 
 model ExamSubject {
-  id       String     @id @default(uuid()) @db.Uuid
-  examId   String     @db.Uuid
-  name     String
-  maxMarks Int        @db.SmallInt
-  position Int        @db.SmallInt
-  exam     Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
-  marks    ExamMark[]
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String     @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa    @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "exam_subjects_madrasa_id_fkey")
+  id        String     @id @default(uuid()) @db.Uuid
+  examId    String     @db.Uuid
+  name      String
+  maxMarks  Int        @db.SmallInt
+  position  Int        @db.SmallInt
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  marks     ExamMark[]
 
   @@unique([examId, name])
+  @@index([madrasaId])
   @@map("exam_subjects")
 }
 
 model ExamResult {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String     @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa    @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "exam_results_madrasa_id_fkey")
   id          String     @id @default(uuid()) @db.Uuid
   examId      String     @db.Uuid
   studentId   String     @db.Uuid
@@ -675,10 +899,14 @@ model ExamResult {
   marks       ExamMark[]
 
   @@unique([examId, studentId])
+  @@index([madrasaId])
   @@map("exam_results")
 }
 
 model ExamMark {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String      @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "exam_marks_madrasa_id_fkey")
   resultId  String      @db.Uuid
   subjectId String      @db.Uuid
   marks     Int         @db.SmallInt
@@ -686,6 +914,7 @@ model ExamMark {
   subject   ExamSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@id([resultId, subjectId])
+  @@index([madrasaId])
   @@map("exam_marks")
 }
 
@@ -694,8 +923,11 @@ model ExamMark {
 // ---------------------------------------------------------------------------
 
 model FeePlan {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String    @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa   @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "fee_plans_madrasa_id_fkey")
   id          String    @id @default(uuid()) @db.Uuid
-  code        String    @unique
+  code        String
   name        String
   /// Minor units (paise for INR).
   amountMinor Int
@@ -706,6 +938,8 @@ model FeePlan {
   students    Student[]
   invoices    Invoice[]
 
+  @@unique([madrasaId, code])
+  @@index([madrasaId])
   @@map("fee_plans")
 }
 
@@ -724,8 +958,11 @@ enum InvoiceStatus {
 /// A fee assessed for one billing period. Amounts are copied from the plan and
 /// concession when issued, so later plan changes never alter it.
 model Invoice {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId     String              @default(dbgenerated()) @db.Uuid
+  madrasa       Madrasa             @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "invoices_madrasa_id_fkey")
   id            String              @id @default(uuid()) @db.Uuid
-  number        String              @unique
+  number        String
   studentId     String              @db.Uuid
   /// YYYY-MM
   period        String              @db.Char(7)
@@ -746,8 +983,10 @@ model Invoice {
   refundParts   RefundAllocation[]
 
   @@unique([studentId, period, planId])
+  @@unique([madrasaId, number])
   @@index([studentId, status])
   @@index([dueDate])
+  @@index([madrasaId])
   @@map("invoices")
 }
 
@@ -756,18 +995,19 @@ enum PaymentMethod {
   UPI
   BANK_TRANSFER
   CHEQUE
-  ONLINE
 }
 
 enum PaymentSource {
   MANUAL
-  ONLINE
   /// A bank transfer or UPI payment the payer reported and staff verified.
   VERIFIED
 }
 
 /// Money received. Confirmed payments are never edited; refunds reverse them.
 model Payment {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId        String                   @default(dbgenerated()) @db.Uuid
+  madrasa          Madrasa                  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payments_madrasa_id_fkey")
   id               String                   @id @default(uuid()) @db.Uuid
   studentId        String                   @db.Uuid
   receiptId        String                   @unique @db.Uuid
@@ -780,23 +1020,25 @@ model Payment {
   receivedOn       DateTime                 @db.Date
   recordedById     String?                  @db.Uuid
   note             String?
-  paymentAttemptId String?                  @unique @db.Uuid
   createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
   student          Student                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
   receipt          Receipt                  @relation(fields: [receiptId], references: [id], onDelete: Restrict)
-  attempt          PaymentAttempt?          @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
   allocations      PaymentAllocation[]
   refunds          Refund[]
-  /// UTR / bank reference or gateway payment id, shown on the receipt.
+  /// UTR / cheque number / bank reference, shown on the receipt.
   reference        String?
   manualSubmission ManualPaymentSubmission?
 
   @@index([studentId])
   @@index([receivedOn])
+  @@index([madrasaId])
   @@map("payments")
 }
 
 model PaymentAllocation {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String  @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payment_allocations_madrasa_id_fkey")
   paymentId   String  @db.Uuid
   invoiceId   String  @db.Uuid
   amountMinor Int
@@ -805,24 +1047,34 @@ model PaymentAllocation {
 
   @@id([paymentId, invoiceId])
   @@index([invoiceId])
+  @@index([madrasaId])
   @@map("payment_allocations")
 }
 
 model Receipt {
-  id       String   @id @default(uuid()) @db.Uuid
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String   @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "receipts_madrasa_id_fkey")
+  id        String   @id @default(uuid()) @db.Uuid
   /// NR-<financial year start>-<sequence>, gapless within each April–March year.
-  number   String   @unique
-  issuedAt DateTime @default(now()) @db.Timestamptz(3)
-  payment  Payment?
+  number    String
+  issuedAt  DateTime @default(now()) @db.Timestamptz(3)
+  payment   Payment?
 
+  @@unique([madrasaId, number])
+  @@index([madrasaId])
   @@map("receipts")
 }
 
 model ReceiptSequence {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String  @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "receipt_sequences_madrasa_id_fkey")
   /// Financial year start, e.g. 2026 for April 2026 – March 2027.
-  fiscalYear Int @id
+  fiscalYear Int
   last       Int
 
+  @@id([madrasaId, fiscalYear])
   @@map("receipt_sequences")
 }
 
@@ -833,6 +1085,9 @@ enum AdjustmentKind {
 
 /// Approved reduction of an invoice's amount due (positive = less to pay).
 model FeeAdjustment {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId    String         @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa        @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "fee_adjustments_madrasa_id_fkey")
   id           String         @id @default(uuid()) @db.Uuid
   invoiceId    String         @db.Uuid
   kind         AdjustmentKind
@@ -843,6 +1098,7 @@ model FeeAdjustment {
   invoice      Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
   @@index([invoiceId])
+  @@index([madrasaId])
   @@map("fee_adjustments")
 }
 
@@ -853,23 +1109,29 @@ enum RefundStatus {
 }
 
 model Refund {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String             @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa            @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "refunds_madrasa_id_fkey")
   id          String             @id @default(uuid()) @db.Uuid
   paymentId   String             @db.Uuid
   amountMinor Int
   reason      String
   status      RefundStatus
-  providerRef String?
   createdById String?            @db.Uuid
   createdAt   DateTime           @default(now()) @db.Timestamptz(3)
   payment     Payment            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   allocations RefundAllocation[]
 
   @@index([paymentId])
+  @@index([madrasaId])
   @@map("refunds")
 }
 
 /// Which invoice a refund gives back to (the balance due rises again).
 model RefundAllocation {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String  @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "refund_allocations_madrasa_id_fkey")
   refundId    String  @db.Uuid
   invoiceId   String  @db.Uuid
   amountMinor Int
@@ -877,60 +1139,15 @@ model RefundAllocation {
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
   @@id([refundId, invoiceId])
+  @@index([madrasaId])
   @@map("refund_allocations")
-}
-
-enum PaymentAttemptStatus {
-  CREATED
-  PENDING
-  SUCCEEDED
-  FAILED
-  EXPIRED
-}
-
-/// An online checkout. Only a verified provider event can mark it SUCCEEDED.
-model PaymentAttempt {
-  id                String               @id @default(uuid()) @db.Uuid
-  reference         String               @unique
-  studentId         String               @db.Uuid
-  payerUserId       String               @db.Uuid
-  invoiceIds        String[]             @db.Uuid
-  amountMinor       Int
-  currency          String               @db.Char(3)
-  provider          String
-  providerOrderId   String?              @unique
-  providerPaymentId String?
-  status            PaymentAttemptStatus @default(CREATED)
-  failureReason     String?
-  expiresAt         DateTime             @db.Timestamptz(3)
-  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
-  student           Student              @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  payment           Payment?
-
-  @@index([studentId, status])
-  @@map("payment_attempts")
-}
-
-/// Every provider callback, stored once. The unique key makes replays no-ops.
-model WebhookEvent {
-  id             String    @id @default(uuid()) @db.Uuid
-  provider       String
-  eventId        String
-  type           String
-  signatureValid Boolean
-  /// Provider payload with card/bank details removed.
-  payload        Json
-  receivedAt     DateTime  @default(now()) @db.Timestamptz(3)
-  processedAt    DateTime? @db.Timestamptz(3)
-  result         String?
-
-  @@unique([provider, eventId])
-  @@map("webhook_events")
 }
 
 /// Approved fee concession. One open row per student (partial unique index).
 model Concession {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId    String         @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa        @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "concessions_madrasa_id_fkey")
   id           String         @id @default(uuid()) @db.Uuid
   studentId    String         @db.Uuid
   kind         ConcessionKind
@@ -941,6 +1158,7 @@ model Concession {
   student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
+  @@index([madrasaId])
   @@map("concessions")
 }
 
@@ -949,17 +1167,25 @@ model Concession {
 // ---------------------------------------------------------------------------
 
 model HostelRoom {
-  id     String      @id @default(uuid()) @db.Uuid
-  code   String      @unique
-  block  String
-  floor  String
-  active Boolean     @default(true)
-  beds   HostelBed[]
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String      @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "hostel_rooms_madrasa_id_fkey")
+  id        String      @id @default(uuid()) @db.Uuid
+  code      String
+  block     String
+  floor     String
+  active    Boolean     @default(true)
+  beds      HostelBed[]
 
+  @@unique([madrasaId, code])
+  @@index([madrasaId])
   @@map("hostel_rooms")
 }
 
 model HostelBed {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String          @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa         @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "hostel_beds_madrasa_id_fkey")
   id          String          @id @default(uuid()) @db.Uuid
   roomId      String          @db.Uuid
   label       String
@@ -968,12 +1194,16 @@ model HostelBed {
   assignments BedAssignment[]
 
   @@unique([roomId, label])
+  @@index([madrasaId])
   @@map("hostel_beds")
 }
 
 /// Who sleeps where, with history. Partial unique indexes (migration) allow one
 /// open assignment per bed and per student, so a bed can never be double-booked.
 model BedAssignment {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId    String    @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa   @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "bed_assignments_madrasa_id_fkey")
   id           String    @id @default(uuid()) @db.Uuid
   bedId        String    @db.Uuid
   studentId    String    @db.Uuid
@@ -986,6 +1216,7 @@ model BedAssignment {
 
   @@index([studentId])
   @@index([bedId])
+  @@index([madrasaId])
   @@map("bed_assignments")
 }
 
@@ -997,6 +1228,9 @@ enum HostelRollStatus {
 
 /// Night roll call: one mark per resident per date.
 model HostelRollEntry {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String           @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa          @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "hostel_roll_entries_madrasa_id_fkey")
   id         String           @id @default(uuid()) @db.Uuid
   studentId  String           @db.Uuid
   date       DateTime         @db.Date
@@ -1008,44 +1242,13 @@ model HostelRollEntry {
 
   @@unique([studentId, date])
   @@index([date])
+  @@index([madrasaId])
   @@map("hostel_roll_entries")
 }
 
 // ---------------------------------------------------------------------------
-// Digital library
+// Files
 // ---------------------------------------------------------------------------
-
-enum LibraryAudience {
-  ALL_STUDENTS
-  HIFZ
-  ALIM
-  STAFF_ONLY
-}
-
-enum ResourceStatus {
-  ACTIVE
-  ARCHIVED
-}
-
-model LibraryResource {
-  id           String          @id @default(uuid()) @db.Uuid
-  title        String
-  category     String
-  type         String
-  author       String?
-  description  String?
-  pages        Int?            @db.SmallInt
-  audience     LibraryAudience @default(ALL_STUDENTS)
-  status       ResourceStatus  @default(ACTIVE)
-  fileId       String?         @unique @db.Uuid
-  uploadedById String?         @db.Uuid
-  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
-  file         StoredFile?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
-
-  @@index([status, category])
-  @@map("library_resources")
-}
 
 /// File metadata. The bytes live in private storage under `storageKey` (never the uploaded name).
 model StoredFile {
@@ -1057,9 +1260,8 @@ model StoredFile {
   sha256       String
   uploadedById String?                  @db.Uuid
   createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
-  resource     LibraryResource?
-  /// What the file is for, so a library file can never be passed off as payment proof.
-  purpose      FilePurpose              @default(LIBRARY)
+  /// What the file is for, so one kind of file can never be passed off as another.
+  purpose      FilePurpose
   upiQrFor     PaymentSettings?
   proofFor     ManualPaymentSubmission?
 
@@ -1126,6 +1328,7 @@ enum DeliveryStatus {
 /// One outbound message. `dedupeKey` makes every scheduled message unique.
 model NotificationDelivery {
   id                String               @id @default(uuid()) @db.Uuid
+  madrasaId         String?              @db.Uuid
   dedupeKey         String               @unique
   userId            String?              @db.Uuid
   guardianId        String?              @db.Uuid
@@ -1153,7 +1356,10 @@ model NotificationDelivery {
 
 /// When fee reminders go out, relative to the due date.
 model ReminderRule {
-  key        String                @id
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String                @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa               @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "reminder_rules_madrasa_id_fkey")
+  key        String
   label      String
   offsetDays Int                   @db.SmallInt
   enabled    Boolean               @default(true)
@@ -1161,15 +1367,20 @@ model ReminderRule {
   position   Int                   @db.SmallInt
   updatedAt  DateTime              @updatedAt @db.Timestamptz(3)
 
+  @@id([madrasaId, key])
   @@map("reminder_rules")
 }
 
 model MessageTemplate {
-  key       String   @id
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId String   @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "message_templates_madrasa_id_fkey")
+  key       String
   subject   String
   body      String
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
+  @@id([madrasaId, key])
   @@map("message_templates")
 }
 
@@ -1178,9 +1389,11 @@ enum ReportFrequency {
   MONTHLY
 }
 
-/// Parent progress report schedule (single row, id = 1).
+/// Parent progress report schedule, one row per madrasa.
 model ScheduledReportConfig {
-  id         Int                   @id @default(1)
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId  String                @id @default(dbgenerated()) @db.Uuid
+  madrasa    Madrasa               @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "scheduled_report_config_madrasa_id_fkey")
   enabled    Boolean               @default(true)
   frequency  ReportFrequency       @default(MONTHLY)
   /// 0 = Sunday … 6 = Saturday (weekly reports)
@@ -1204,8 +1417,11 @@ enum RunStatus {
 
 /// One execution of the parent report for one period; the unique key makes reruns no-ops.
 model ReportRun {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId   String                 @default(dbgenerated()) @db.Uuid
+  madrasa     Madrasa                @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "report_runs_madrasa_id_fkey")
   id          String                 @id @default(uuid()) @db.Uuid
-  periodKey   String                 @unique
+  periodKey   String
   periodStart DateTime               @db.Date
   periodEnd   DateTime               @db.Date
   status      RunStatus              @default(RUNNING)
@@ -1215,6 +1431,8 @@ model ReportRun {
   error       String?
   deliveries  NotificationDelivery[]
 
+  @@unique([madrasaId, periodKey])
+  @@index([madrasaId])
   @@map("report_runs")
 }
 
@@ -1239,6 +1457,8 @@ model AuditLog {
   id          String   @id @default(uuid()) @db.Uuid
   at          DateTime @default(now()) @db.Timestamptz(3)
   /// Null for system/job actions.
+  /// Madrasa the action concerns; null for organization-level actions.
+  madrasaId   String?  @db.Uuid
   actorUserId String?  @db.Uuid
   actorName   String
   actorRole   String
@@ -1254,56 +1474,43 @@ model AuditLog {
   @@index([at(sort: Desc)])
   @@index([entityType, entityId])
   @@index([actorUserId, at(sort: Desc)])
+  @@index([madrasaId, at(sort: Desc)])
   @@map("audit_logs")
 }
 
 // ---------- Configurable payment methods ----------
 
 enum FilePurpose {
-  LIBRARY
   PAYMENT_PROOF
   UPI_QR
 }
 
-enum RazorpayMode {
-  TEST
-  LIVE
-}
-
-/// How the institution accepts fees: Razorpay, bank transfer and/or UPI QR.
-/// Razorpay secrets are AES-256-GCM sealed (SETTINGS_ENCRYPTION_KEYS); never returned by the API.
+/// How a madrasa accepts fees from families: bank transfer and/or UPI to its own account.
 model PaymentSettings {
-  institutionId                Int                 @id @default(1)
-  razorpayEnabled              Boolean             @default(false)
-  razorpayMode                 RazorpayMode        @default(TEST)
-  razorpayKeyId                String?
-  razorpaySecret               Bytes?
-  razorpayWebhookSecret        Bytes?
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId         String      @id @default(dbgenerated()) @db.Uuid
+  madrasa           Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payment_settings_madrasa_id_fkey")
   /// When the current keys were last checked against Razorpay's API.
-  razorpayValidatedAt          DateTime?           @db.Timestamptz(3)
   /// Key id for which a correctly signed webhook last arrived (live readiness needs one).
-  razorpayWebhookVerifiedKeyId String?
-  razorpayWebhookVerifiedAt    DateTime?           @db.Timestamptz(3)
-  bankEnabled                  Boolean             @default(false)
-  bankAccountName              String?
-  bankName                     String?
-  bankAccountNumber            String?
-  bankIfsc                     String?
-  bankBranch                   String?
-  bankAccountType              String?
-  bankInstructions             String?
-  bankReferenceHint            String?
-  bankProofRequired            Boolean             @default(false)
-  upiEnabled                   Boolean             @default(false)
-  upiQrFileId                  String?             @unique @db.Uuid
-  upiId                        String?
-  upiPayeeName                 String?
-  upiInstructions              String?
-  upiProofRequired             Boolean             @default(false)
-  updatedById                  String?             @db.Uuid
-  updatedAt                    DateTime            @updatedAt @db.Timestamptz(3)
-  institution                  InstitutionSettings @relation(fields: [institutionId], references: [id], onDelete: Restrict)
-  upiQr                        StoredFile?         @relation(fields: [upiQrFileId], references: [id], onDelete: Restrict)
+  bankEnabled       Boolean     @default(false)
+  bankAccountName   String?
+  bankName          String?
+  bankAccountNumber String?
+  bankIfsc          String?
+  bankBranch        String?
+  bankAccountType   String?
+  bankInstructions  String?
+  bankReferenceHint String?
+  bankProofRequired Boolean     @default(false)
+  upiEnabled        Boolean     @default(false)
+  upiQrFileId       String?     @unique @db.Uuid
+  upiId             String?
+  upiPayeeName      String?
+  upiInstructions   String?
+  upiProofRequired  Boolean     @default(false)
+  updatedById       String?     @db.Uuid
+  updatedAt         DateTime    @updatedAt @db.Timestamptz(3)
+  upiQr             StoredFile? @relation(fields: [upiQrFileId], references: [id], onDelete: Restrict)
 
   @@map("payment_settings")
 }
@@ -1323,6 +1530,9 @@ enum ManualPaymentStatus {
 /// A payer's claim that they paid by bank transfer or UPI. It changes no balance
 /// until authorised staff approve it, which records a Payment in the one ledger.
 model ManualPaymentSubmission {
+  /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
+  madrasaId           String              @default(dbgenerated()) @db.Uuid
+  madrasa             Madrasa             @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "manual_payment_submissions_madrasa_id_fkey")
   id                  String              @id @default(uuid()) @db.Uuid
   studentId           String              @db.Uuid
   submittedById       String              @db.Uuid
@@ -1353,5 +1563,6 @@ model ManualPaymentSubmission {
   @@index([status, createdAt])
   @@index([studentId])
   @@index([referenceKey])
+  @@index([madrasaId])
   @@map("manual_payment_submissions")
 }

@@ -1,22 +1,25 @@
-import { prisma } from '../database/prisma.js'
+import { tenant } from '../tenancy/context.js'
+import { madrasaProfile } from '../tenancy/settings.js'
 
 const DEFAULT_TZ = 'Asia/Kolkata'
-let cached: { tz: string; at: number } | null = null
 
-/** The institution's timezone (settings row), cached briefly. */
-export async function institutionTimezone() {
-  if (cached && Date.now() - cached.at < 60_000) return cached.tz
-  const s = await prisma.institutionSettings.findUnique({ where: { id: 1 }, select: { timezone: true } })
-  cached = { tz: s?.timezone ?? DEFAULT_TZ, at: Date.now() }
-  return cached.tz
+/**
+ * The timezone of a madrasa (CR-01: each madrasa has its own settings). Without one
+ * given, the active madrasa's, else the first madrasa the caller reads from.
+ */
+export async function institutionTimezone(madrasaId?: string) {
+  const t = tenant()
+  const id = madrasaId ?? t?.active ?? t?.ids[0]
+  if (!id) return DEFAULT_TZ
+  return (await madrasaProfile(id)).timezone
 }
 
 /** YYYY-MM-DD of `now` in the given timezone. */
 export const dateIn = (tz: string, now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 
-/** "Today" for the Madarsa, not for the server or the browser. */
-export async function institutionToday() {
-  return dateIn(await institutionTimezone())
+/** "Today" for the madrasa, not for the server or the browser. */
+export async function institutionToday(madrasaId?: string) {
+  return dateIn(await institutionTimezone(madrasaId))
 }
 
 export const addDaysIso = (iso: string, n: number) => {

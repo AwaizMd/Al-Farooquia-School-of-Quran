@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { prisma } from '../../src/database/prisma.js'
+import { prisma } from '../helpers/db.js'
 import { testOutbox } from '../../src/integrations/mail/mailer.js'
 import { unseal } from '../../src/common/crypto.js'
 import { resetDatabase } from '../helpers/db.js'
 import { PASSWORD, client, makeUser, nextCode, reauth, secretFrom, signInEnrolled, tick } from '../helpers/auth.js'
 
 const MFA_POLICY = [
-  ['ADMIN', true], ['PRINCIPAL', true], ['MENTOR', true], ['STUDENT', false], ['PARENT', false], ['WARDEN', false],
+  ['MADRASA_ADMIN', true], ['PRINCIPAL', true], ['MENTOR', true], ['STUDENT', false], ['PARENT', false], ['WARDEN', false],
 ] as const
 
 beforeEach(async () => {
@@ -77,7 +77,7 @@ describe('sign-in', () => {
 })
 
 describe('mandatory MFA (admin, principal, mentor)', () => {
-  it.each(['ADMIN', 'PRINCIPAL', 'MENTOR'] as const)('%s must enroll before reaching anything else', async (role) => {
+  it.each(['MADRASA_ADMIN', 'PRINCIPAL', 'MENTOR'] as const)('%s must enroll before reaching anything else', async (role) => {
     await makeUser({ email: 'staff@x.test', roles: [role] })
     const c = client()
     const login = await c.post('/api/v1/auth/login', { identifier: 'staff@x.test', password: PASSWORD })
@@ -92,7 +92,7 @@ describe('mandatory MFA (admin, principal, mentor)', () => {
   })
 
   it('enrolls with a QR code, stores the secret encrypted, and returns ten one-time recovery codes', async () => {
-    const u = await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    const u = await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     const c = client()
     await c.post('/api/v1/auth/login', { identifier: 'a@x.test', password: PASSWORD })
     const enr = await c.post('/api/v1/auth/mfa/enrollment')
@@ -129,7 +129,7 @@ describe('mandatory MFA (admin, principal, mentor)', () => {
   })
 
   it('requires the code at every later sign-in, rejects replays and wrong codes', async () => {
-    await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     const { secret } = await signInEnrolled(client(), 'a@x.test')
 
     tick()
@@ -150,7 +150,7 @@ describe('mandatory MFA (admin, principal, mentor)', () => {
   })
 
   it('ends the pre-MFA session after five wrong codes', async () => {
-    await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     await signInEnrolled(client(), 'a@x.test')
     const c = client()
     await c.post('/api/v1/auth/login', { identifier: 'a@x.test', password: PASSWORD })
@@ -161,7 +161,7 @@ describe('mandatory MFA (admin, principal, mentor)', () => {
   })
 
   it('accepts each recovery code once and tells the user', async () => {
-    await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     const { recoveryCodes } = await signInEnrolled(client(), 'a@x.test')
     const code = recoveryCodes[0]!
     const c = client()
@@ -239,7 +239,7 @@ describe('CSRF and request hygiene', () => {
     expect(form.status).toBe(415)
   })
   it('strips unknown fields (no mass assignment)', async () => {
-    const r = await client().post('/api/v1/auth/login', { identifier: 'x@x.test', password: 'y', role: 'ADMIN' })
+    const r = await client().post('/api/v1/auth/login', { identifier: 'x@x.test', password: 'y', role: 'MADRASA_ADMIN' })
     expect(r.status).toBe(401)
   })
 })
@@ -272,7 +272,7 @@ describe('password reset and invitations', () => {
   })
 
   it('does not let a password reset bypass MFA', async () => {
-    await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     await signInEnrolled(client(), 'a@x.test')
     await client().post('/api/v1/auth/password/forgot', { email: 'a@x.test' })
     const token = /token=([\w-]+)/.exec(testOutbox.at(-1)!.text)![1]!
@@ -281,7 +281,7 @@ describe('password reset and invitations', () => {
   })
 
   it('activates an invited account and verifies its email', async () => {
-    const admin = await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    const admin = await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     const c = client()
     const { secret } = await signInEnrolled(c, admin.email!)
     await reauth(c, secret)
@@ -297,7 +297,7 @@ describe('password reset and invitations', () => {
   })
 
   it('gives the office a one-time setup link for accounts without email', async () => {
-    await makeUser({ email: 'a@x.test', roles: ['ADMIN'] })
+    await makeUser({ email: 'a@x.test', roles: ['MADRASA_ADMIN'] })
     const c = client()
     const { secret } = await signInEnrolled(c, 'a@x.test')
     await reauth(c, secret)

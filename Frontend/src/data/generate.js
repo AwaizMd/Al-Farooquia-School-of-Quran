@@ -4,7 +4,7 @@ import { createRng } from '../utils/random'
 import { addDays, weekday, monthKey, addMonths, diffDays } from '../utils/date'
 import { DEFAULT_SETTINGS, ADMIN_USER } from '../constants/config'
 import { GROUPS, MENTORS, PARENTS, STUDENT_SEEDS, CONCESSIONS, AREAS } from './people'
-import { FEE_PLANS, planForSeed, HOSTEL_ROOMS, BED_SEED, LIBRARY } from './catalog'
+import { FEE_PLANS, planForSeed, HOSTEL_ROOMS, BED_SEED } from './catalog'
 import { surahByNumber, juzOf } from './quran'
 import { SUBJECTS } from '../constants/exams'
 
@@ -356,8 +356,6 @@ export function generateSeed(today) {
     })
   })
 
-  // ---- Library ----
-  const library = LIBRARY.map((r) => ({ ...r, uploaded: addDays(today, r.uploaded), uploadedBy: 'Academic Office' }))
 
   // ---- Notifications ----
   const notifications = [
@@ -365,7 +363,6 @@ export function generateSeed(today) {
     { id: 'N-2', audience: [{ role: 'admin' }], title: 'Quarterly exam marks submitted', body: 'Mufti Zubair Ahmed Qasmi entered marks for Alimiyyah Year 1.', date: addDays(today, -17), link: '/exams/EX-4', read: true },
     { id: 'N-3', audience: [{ role: 'admin' }, { role: 'mentor', id: 'm5' }], title: 'Marks pending: Oral Makharij Check', body: 'The Qaida oral assessment was held yesterday. Marks have not been entered yet.', date: today, link: '/exams/EX-5', read: false },
     { id: 'N-4', audience: [{ role: 'mentor', id: 'm1' }], title: 'Juz Review Test in 4 days', body: 'Hifz Halqa A — prepare students for the Juz review.', date: addDays(today, -1), link: '/exams/EX-6', read: false },
-    { id: 'N-5', audience: [{ role: 'mentor' }, { role: 'student' }], title: 'New resource: Waqf Signs in the Mushaf', body: 'A short Tajweed guide was added to the Digital Library.', date: addDays(today, -5), link: '/library', read: false },
     { id: 'N-6', audience: [{ role: 'parent', id: 'p1' }], title: 'Monthly fee is due soon', body: 'The current month fee for Abdullah and Maryam is due within a week.', date: today, link: '/fees', read: false },
     { id: 'N-7', audience: [{ role: 'parent', id: 'p1' }, { role: 'student', id: 'S-1001' }], title: 'Juz Review Test scheduled', body: 'Hifz Halqa A has a Juz Review Test in 4 days.', date: addDays(today, -1), link: '/exams', read: false },
     { id: 'N-8', audience: [{ role: 'student', id: 'S-1001' }], title: 'Mentor feedback added', body: 'Qari Abdul Rahman left feedback on your latest Sabaq.', date: addDays(today, -1), link: '/sabaq', read: true },
@@ -416,7 +413,6 @@ export function generateSeed(today) {
     grading: DEFAULT_GRADING.map((g) => ({ ...g })),
     rooms: HOSTEL_ROOMS.map((r) => ({ ...r })),
     beds,
-    library,
     notifications,
     audit,
   }

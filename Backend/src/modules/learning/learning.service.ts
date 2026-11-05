@@ -89,7 +89,7 @@ export async function createRecord(req: Request, input: LearningInput) {
   if (!manage && daysBetween(input.date, today) > MENTOR_BACKDATE_DAYS) throw fieldError('date', `Mentors can record lessons from the last ${MENTOR_BACKDATE_DAYS} days only.`)
   if (student.status !== 'ACTIVE') throw new AppError(409, 'STUDENT_INACTIVE', 'This student is not active.')
   const parts = shape(input, student.group.track)
-  const ownStaff = await prisma.staffProfile.findUnique({ where: { userId: req.auth!.user.id }, select: { id: true } })
+  const ownStaff = await prisma.staffProfile.findFirst({ where: { userId: req.auth!.user.id }, select: { id: true } })
   const record = await prisma.$transaction(async (tx) => {
     const r = await tx.learningRecord.create({
       data: {

@@ -4,7 +4,9 @@ Express 5 + TypeScript API and background worker for the Al Farooquia Madarsa Ma
 
 - Deployment, backups, secret rotation and providers: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Security controls and known limitations: [docs/SECURITY.md](docs/SECURITY.md)
-- Fee payment methods (Razorpay, bank transfer, UPI QR) and verification: [docs/PAYMENTS.md](docs/PAYMENTS.md)
+- Organization, madrasas, roles and the permission matrix: [docs/ROLES.md](docs/ROLES.md)
+- Change Request 01 (multi-madrasa and more): plan and status [docs/CR-01-PLAN.md](docs/CR-01-PLAN.md), open decisions [docs/DECISIONS.md](docs/DECISIONS.md)
+- Fee payments (bank transfer and UPI to each madrasa's own account, verified by the office; no gateway): [docs/PAYMENTS.md](docs/PAYMENTS.md)
 - QA audit (30 Oct 2026): what was tested, defects found and fixed, what remains: [docs/QA-REPORT.md](docs/QA-REPORT.md)
 - API reference: http://localhost:4000/api/docs when `API_DOCS_ENABLED=true` (OpenAPI 3.1 at `/api/docs/openapi.json`)
 
@@ -26,8 +28,7 @@ npm run dev:worker          # terminal 3: scheduled jobs (invoices, reminders, r
 Then run `npm run dev` in `Frontend/` for the web app (http://localhost:5173). Vite forwards `/api` to the backend.
 
 - Development emails are written to `Backend/.local/outbox/`.
-- Uploaded library files go to `Backend/storage/`.
-- `PAYMENT_PROVIDER=dev` enables a test payment gateway, which sends real signed webhooks but moves no money.
+- Uploaded files (payment proofs, UPI QR codes) go to `Backend/storage/`.
 - `npm run db:stop` stops a PostgreSQL left running after its terminal closed.
 
 ### Development data (`npm run db:seed`)
@@ -37,17 +38,21 @@ The seed loads fictional data, never real data, and refuses to run in production
 - **People:** the 32 students, 23 guardians and 9 staff from the web app's demo dataset.
 - **Activity:** 30 school days of attendance and lessons, plus exams and results.
 - **Fees:** four months of invoices and payments.
-- **Campus:** hostel rooms and residents, and the library with two sample PDFs.
-- **Payments:** online (development gateway), bank transfer and UPI QR all switched on with clearly fake demo details (the QR encodes text, not a payment address), and a few reported bank/UPI payments waiting for verification, needing information or rejected.
+- **Campus:** hostel rooms and residents.
+- **Payments:** bank transfer and UPI QR switched on with clearly fake demo details (the QR encodes text, not a payment address), and a few reported bank/UPI payments waiting for verification, needing information or rejected.
+- **Madrasas:** all of the above belongs to madrasa **MAIN**. A second, nearly empty madrasa **GIRLS** (one halqa, one fee plan) shows the madrasa switcher and isolation.
 
 It also creates one sign-in per role. The password for all of them is `farooquia-dev-only`.
 
 | Role | Sign in with | MFA |
 |---|---|---|
-| Administrator | admin@farooquia.demo | mandatory: set up at first sign-in |
-| Principal | principal@farooquia.demo | mandatory |
-| Mentor (Hifz Halqa A) | mentor@farooquia.demo | mandatory |
-| Mentor (Hifz Halqa B) | mentor2@farooquia.demo | mandatory |
+| Super Admin (all madrasas) | admin@farooquia.demo | mandatory: set up at first sign-in |
+| Accountant (MAIN) | accountant@farooquia.demo | mandatory |
+| Chartered Accountant (MAIN, GIRLS; access expires in a year) | ca@farooquia.demo | mandatory |
+| Committee Member (MAIN, GIRLS) | committee@farooquia.demo | mandatory |
+| Principal (MAIN) | principal@farooquia.demo | mandatory |
+| Mentor (Hifz Halqa A, MAIN) | mentor@farooquia.demo | mandatory |
+| Mentor (Hifz Halqa B, MAIN; also GIRLS) | mentor2@farooquia.demo | mandatory |
 | Warden | warden@farooquia.demo | optional |
 | Parent (Abdullah and Maryam) | parent@farooquia.demo | optional |
 | Parent (Usman, Ayaan and Zainab Qureshi) | parent2@farooquia.demo | optional |
@@ -81,13 +86,15 @@ src/
     students, staff              students, guardians, halqas, mentors, fee plans
     attendance, learning         daily registers, Sabaq/Sabqi/Manzil/Nazira/Qaida records
     assessments                  exams, marks, versioned grading, report cards
-    fees                         invoices, payments, receipts, refunds, online checkout, webhooks, bank/UPI verification
-    payment-settings             which payment methods are offered, Razorpay keys (sealed), bank details, UPI QR
+    organization                 organization, madrasas, per-madrasa settings and feature flags
+    fees                         invoices, payments, receipts, refunds, bank/UPI verification
+    payment-settings             each madrasa's bank details and UPI QR
     notifications                in-app notices, delivery queue, fee reminders, settings
     scheduled-reports            parent progress reports
-    hostel, library              rooms/beds/roll call, catalogue and private files
+    hostel                       rooms/beds/roll call
     audit-logs                   append-only activity log
-  integrations/                  mail (SMTP/file), payments (dev, Razorpay), storage (disk, S3)
+  tenancy/                       madrasa context, Prisma scoping extension, memberships, settings, row locks
+  integrations/                  mail (SMTP/file), storage (disk, S3)
   jobs/registry.ts               background jobs and their schedules
 prisma/                          schema, reviewed SQL migrations, development seed
 tests/                           unit, integration and security suites
@@ -114,8 +121,8 @@ These are the defaults approved for this build. Each is noted in the code where 
   - Monthly invoices are issued on the 1st and due on the 10th; a new admission is billed for the current month in full.
   - Concessions are 10% (sibling), 50% (need-based) or 100% (sponsorship), rounded to ₹10, and approved by an administrator.
   - Payments go to the oldest invoice first, and overpayment at the office is refused.
-  - Bank transfer / UPI payments are claims until an administrator approves them; claims may not exceed what is owed after other pending claims; one live claim per UTR (details in [docs/PAYMENTS.md](docs/PAYMENTS.md)).
-  - Receipt numbers restart each April–March financial year.
+  - Bank transfer / UPI payments are claims until an administrator or accountant approves them; claims may not exceed what is owed after other pending claims; one live claim per UTR (details in [docs/PAYMENTS.md](docs/PAYMENTS.md)).
+  - Receipt numbers follow each madrasa's own series and restart each April–March financial year.
   - A change to a fee plan affects future invoices only.
 - **Reminders:** 3 days before, on the due date, and 3 and 7 days after (editable), at 09:00 Asia/Kolkata, at most once per stage. The balance is re-checked before each send.
 - **Parent reports:** monthly on the 1st at 09:00, covering the previous month (weekly is optional).

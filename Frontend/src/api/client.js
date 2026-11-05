@@ -11,6 +11,17 @@ export const apiUrl = (path) => BASE + path
 let csrfToken = ''
 export const setCsrfToken = (token) => { csrfToken = token || '' }
 
+// The madrasa the app is working in (CR-01). Only a choice: the server checks it against
+// the account's memberships on every request. Remembered per browser for convenience.
+const MADRASA_KEY = 'mms.madrasa'
+let madrasaId = (() => { try { return localStorage.getItem(MADRASA_KEY) || '' } catch { return '' } })()
+export const currentMadrasaId = () => madrasaId
+export function setMadrasaId(id) {
+  madrasaId = id || ''
+  try { if (madrasaId) localStorage.setItem(MADRASA_KEY, madrasaId); else localStorage.removeItem(MADRASA_KEY) } catch { /* private mode: keep it in memory */ }
+}
+const madrasaHeader = () => (madrasaId ? { 'X-Madrasa-Id': madrasaId } : {})
+
 export class ApiError extends Error {
   constructor(status, code, message, details) {
     super(message)
@@ -30,7 +41,7 @@ const listeners = new Set()
 export const onSessionLost = (fn) => { listeners.add(fn); return () => listeners.delete(fn) }
 
 export async function api(path, { method = 'GET', body, signal } = {}) {
-  const headers = { Accept: 'application/json' }
+  const headers = { Accept: 'application/json', ...madrasaHeader() }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
   let res
@@ -63,7 +74,7 @@ export const del = (path) => api(path, { method: 'DELETE' })
 export async function upload(path, file, { method = 'PUT', type = file.type, name = file.name } = {}) {
   let res
   try {
-    res = await fetch(BASE + path, { method, body: file, credentials: CREDENTIALS, headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name), 'X-CSRF-Token': csrfToken } })
+    res = await fetch(BASE + path, { method, body: file, credentials: CREDENTIALS, headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name), 'X-CSRF-Token': csrfToken, ...madrasaHeader() } })
   } catch {
     throw new ApiError(0, 'NETWORK', 'Cannot reach the server. Check your connection and try again.')
   }
@@ -90,7 +101,7 @@ export function takeUrlToken() {
 
 /** Fetch a private file (QR image, proof of payment) and return an object URL for <img> or a new tab. */
 export async function blobUrl(path) {
-  const res = await fetch(BASE + path, { credentials: CREDENTIALS })
+  const res = await fetch(BASE + path, { credentials: CREDENTIALS, headers: madrasaHeader() })
   if (!res.ok) {
     const data = await res.json().catch(() => null)
     throw new ApiError(res.status, data?.error?.code || 'HTTP_' + res.status, data?.error?.message || 'Could not load the file.')

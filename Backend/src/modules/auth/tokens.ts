@@ -1,9 +1,8 @@
-import type { Prisma } from '../../generated/prisma/client.js'
 import type { AuthTokenPurpose } from '../../generated/prisma/enums.js'
 import { hashToken, newToken } from '../../common/crypto.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 
-type Db = Prisma.TransactionClient | typeof prisma
+type Db = Tx | typeof prisma
 
 export const TOKEN_TTL_MS: Record<AuthTokenPurpose, number> = {
   INVITE: 72 * 60 * 60 * 1000,

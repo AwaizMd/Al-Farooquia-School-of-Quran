@@ -1,13 +1,12 @@
 import type { CookieOptions, Request, Response } from 'express'
 import { randomBytes } from 'node:crypto'
-import type { Prisma } from '../../generated/prisma/client.js'
 import type { Role, SessionStage } from '../../generated/prisma/enums.js'
 import { env } from '../../config/env.js'
 import { hashToken, newToken } from '../../common/crypto.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { STAFF_ROLES } from './permissions.js'
 
-type Db = Prisma.TransactionClient | typeof prisma
+type Db = Tx | typeof prisma
 
 // __Host- prefix: browser enforces Secure, Path=/ and no Domain, so a sibling
 // subdomain cannot plant or overwrite the cookie.

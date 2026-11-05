@@ -6,6 +6,19 @@ import { issueInvoices } from '../modules/fees/fees.service.js'
 import { deliverDue } from '../modules/notifications/notify.service.js'
 import { runReminders } from '../modules/notifications/reminders.service.js'
 import { tick } from '../modules/scheduled-reports/reports.service.js'
+import { asOrg, withMadrasa } from '../tenancy/context.js'
+import { madrasaProfile } from '../tenancy/settings.js'
+
+/** Run a job once per active madrasa, each inside its own madrasa context (CR-01 §1). */
+async function forEachMadrasa(fn: (madrasaId: string) => Promise<unknown>, needs?: 'FEES' | 'SCHEDULED_REPORTS') {
+  const madrasas = await asOrg('job fan-out over active madrasas', () => prisma.madrasa.findMany({ where: { active: true }, select: { id: true, code: true } }))
+  const out: Record<string, unknown> = {}
+  for (const m of madrasas) {
+    if (needs && !(await madrasaProfile(m.id)).features[needs]) { out[m.code] = 'feature off'; continue }
+    out[m.code] = await withMadrasa(m.id, () => fn(m.id))
+  }
+  return out
+}
 
 export interface JobDef {
   name: string
@@ -17,10 +30,11 @@ export interface JobDef {
 
 /** Every background job. All of them are idempotent: running one twice changes nothing the second time. */
 export const JOBS: JobDef[] = [
-  { name: 'fees-issue-monthly', cron: '10 0 1 * *', description: 'Issue the month’s invoices on the 1st', run: async () => issueInvoices(null, (await institutionToday()).slice(0, 7)) },
-  { name: 'fees-reminders', cron: '0 9 * * *', description: 'Queue fee reminders due today', run: () => runReminders() },
-  { name: 'progress-reports', cron: '5 * * * *', description: 'Send scheduled parent progress reports when due', run: () => tick() },
-  { name: 'deliver-notifications', cron: '* * * * *', description: 'Send queued messages, with retries', run: () => deliverDue() },
+  { name: 'fees-issue-monthly', cron: '10 0 1 * *', description: 'Issue the month’s invoices on the 1st', run: () => forEachMadrasa(async () => issueInvoices(null, (await institutionToday()).slice(0, 7)), 'FEES') },
+  { name: 'fees-reminders', cron: '0 9 * * *', description: 'Queue fee reminders due today', run: () => forEachMadrasa(() => runReminders(), 'FEES') },
+  { name: 'progress-reports', cron: '5 * * * *', description: 'Send scheduled parent progress reports when due', run: () => forEachMadrasa(() => tick(), 'SCHEDULED_REPORTS') },
+  // The outbox is shared; each message re-checks its own record (e.g. the invoice) before sending.
+  { name: 'deliver-notifications', cron: '* * * * *', description: 'Send queued messages, with retries', run: () => asOrg('outbox delivery for every madrasa', () => deliverDue()) },
 ]
 
 /** Run a job and record the outcome for monitoring. */
@@ -38,10 +52,10 @@ export async function runTracked(job: JobDef) {
 }
 
 export async function jobOverview() {
-  const [status, deliveries] = await Promise.all([
+  const [status, deliveries] = await asOrg('job monitoring', () => Promise.all([
     prisma.jobStatus.findMany(),
     prisma.notificationDelivery.groupBy({ by: ['status'], _count: true }),
-  ])
+  ]))
   return {
     jobs: JOBS.map((j) => ({ name: j.name, cron: j.cron, description: j.description, ...(status.find((s) => s.name === j.name) ?? {}) })),
     deliveries: Object.fromEntries(deliveries.map((d) => [d.status, d._count])),

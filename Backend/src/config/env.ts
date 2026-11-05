@@ -64,21 +64,7 @@ const schema = z.object({
   SMTP_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
   MAIL_FROM: z.string().min(3).default('Al Farooquia MMS <no-reply@farooquia.demo>'),
 
-  // Online fee payment. none: Razorpay is configured by an administrator in Fee Payment Settings
-  // (credentials sealed with SETTINGS_ENCRYPTION_KEYS). razorpay: credentials come from the
-  // RAZORPAY_* variables below instead. dev: local simulator, never allowed in production.
-  PAYMENT_PROVIDER: z.enum(['none', 'dev', 'razorpay']).default('none'),
-  // Versioned AES-256 keys for payment secrets entered in the admin panel (same format as MFA keys).
-  SETTINGS_ENCRYPTION_KEYS: z.preprocess((v) => (v === '' ? undefined : v), keyring.optional()),
-  SETTINGS_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1).optional(),
-  DEV_PAYMENT_WEBHOOK_SECRET: z.string().min(16).default('dev-only-webhook-secret-change-me'),
-  RAZORPAY_KEY_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  RAZORPAY_KEY_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  RAZORPAY_WEBHOOK_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  // Override Razorpay's API address (tests point it at a local fake). Leave unset in production.
-  RAZORPAY_API_BASE: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
-
-  // Private file storage for library uploads: local disk (one server) or an S3-compatible bucket.
+  // Private file storage (payment proofs, UPI QR codes, attachments): local disk (one server) or an S3-compatible bucket.
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_DIR: z.string().default('storage'),
   S3_BUCKET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
@@ -104,16 +90,8 @@ function load(): Env {
     if (!env.COOKIE_SECURE) throw new Error('COOKIE_SECURE cannot be false in production')
     if (env.MAIL_TRANSPORT !== 'smtp' || !env.SMTP_URL) throw new Error('Production requires MAIL_TRANSPORT=smtp and SMTP_URL')
   }
-  if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'dev') throw new Error('PAYMENT_PROVIDER=dev is not allowed in production')
-  if (env.NODE_ENV === 'production' && env.RAZORPAY_API_BASE && !env.RAZORPAY_API_BASE.startsWith('https://api.razorpay.com/')) throw new Error('RAZORPAY_API_BASE may only point at Razorpay in production')
-  if (env.PAYMENT_PROVIDER === 'razorpay' && !(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_WEBHOOK_SECRET)) {
-    throw new Error('PAYMENT_PROVIDER=razorpay needs RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET')
-  }
   if (env.STORAGE_DRIVER === 's3' && !(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY)) {
     throw new Error('STORAGE_DRIVER=s3 needs S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY')
-  }
-  if (env.SETTINGS_ENCRYPTION_KEYS && !env.SETTINGS_ENCRYPTION_KEYS.has(env.SETTINGS_ACTIVE_KEY_VERSION ?? 0)) {
-    throw new Error('SETTINGS_ACTIVE_KEY_VERSION does not match any key in SETTINGS_ENCRYPTION_KEYS')
   }
   if (!env.MFA_ENCRYPTION_KEYS.has(env.MFA_ACTIVE_KEY_VERSION)) {
     throw new Error('MFA_ACTIVE_KEY_VERSION does not match any key in MFA_ENCRYPTION_KEYS')

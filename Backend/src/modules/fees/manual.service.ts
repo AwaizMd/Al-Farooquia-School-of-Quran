@@ -1,4 +1,5 @@
 import type { Request } from 'express'
+import { lockRow } from '../../tenancy/locks.js'
 import { createHash, randomUUID } from 'node:crypto'
 import type { Prisma } from '../../generated/prisma/client.js'
 import type { ManualPaymentMethod, ManualPaymentStatus } from '../../generated/prisma/enums.js'
@@ -6,9 +7,9 @@ import { AppError, conflict, forbidden, notFound } from '../../common/errors.js'
 import { institutionToday } from '../../common/clock.js'
 import { IMAGE_TYPES, PDF_TYPE, checkUpload, safeFileName } from '../../common/fileTypes.js'
 import { consume } from '../../common/rateLimit.js'
-import { prisma } from '../../database/prisma.js'
+import { prisma, type Tx } from '../../database/prisma.js'
 import { storage } from '../../integrations/storage/storage.js'
-import { rolesWith } from '../auth/permissions.js'
+import { usersWith } from '../../tenancy/access.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { money, notifyStudentFamily, notifyUsers } from '../notifications/notify.service.js'
 import { availableMethods } from '../payment-settings/settings.service.js'
@@ -33,7 +34,6 @@ const METHOD_LABEL: Record<ManualPaymentMethod, string> = { BANK_TRANSFER: 'bank
 export const referenceKey = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 const code = (id: string) => `MP-${id.slice(0, 8).toUpperCase()}`
 
-type Tx = Prisma.TransactionClient
 
 /** A guardian linked to the student with payment rights (the approved "who can submit" rule). */
 async function payerLink(req: Request, studentId: string) {
@@ -114,7 +114,7 @@ export async function submit(req: Request, input: SubmitInput) {
 
   const created = await prisma.$transaction(async (tx) => {
     // Same lock as every other change to this student's money.
-    await tx.$queryRaw`SELECT id FROM students WHERE id = ${input.studentId}::uuid FOR UPDATE`
+    if (!(await lockRow(tx, 'students', input.studentId))) throw notFound()
     await assertReferenceFree(tx, key)
     if (input.proofFileId) await attachableProof(tx, req, input.proofFileId)
     const { balance, currency } = await openBalance(tx, input.studentId, input.invoiceIds, today)
@@ -137,8 +137,7 @@ export async function submit(req: Request, input: SubmitInput) {
     await audit({ action: 'fees.manual_payment_submitted', summary: `${code(sub.id)}: ${METHOD_LABEL[sub.method]} of ${money(sub.amountMinor, currency)} reported (ref ${key}); awaiting verification`, entityType: 'manual_payment', entityId: sub.id, metadata: { studentId: sub.studentId } }, req, tx)
     // Worded as a claim under review, never as a successful payment.
     await notifyStudentFamily(tx, sub.studentId, { category: 'FEES', title: 'Payment submitted for verification', body: `${METHOD_LABEL[sub.method]} of ${money(sub.amountMinor, currency)} (ref ${sub.reference}). The fee stays outstanding until the office confirms it.`, link: '/fees' }, { fees: true })
-    const staff = await tx.user.findMany({ where: { status: 'ACTIVE', roles: { some: { role: { in: rolesWith('fees.verify') } } } }, select: { id: true } })
-    await notifyUsers(tx, staff.map((u) => u.id), { category: 'FEES', title: 'Payment to verify', body: `${sub.student.name}: ${METHOD_LABEL[sub.method]} of ${money(sub.amountMinor, currency)}, ref ${sub.reference}`, link: '/payment-verification' })
+    await notifyUsers(tx, await usersWith('fees.verify', sub.madrasaId), { category: 'FEES', title: 'Payment to verify', body: `${sub.student.name}: ${METHOD_LABEL[sub.method]} of ${money(sub.amountMinor, currency)}, ref ${sub.reference}`, link: '/payment-verification' })
     return sub
   })
   return getSubmission(req, created.id)
@@ -231,8 +230,7 @@ export async function proofFile(req: Request, id: string) {
 
 /** Lock the submission and check it can still be reviewed by this person. */
 async function lockForReview(tx: Tx, req: Request, id: string) {
-  const [row] = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM manual_payment_submissions WHERE id = ${id}::uuid FOR UPDATE`
-  if (!row) throw notFound()
+  if (!(await lockRow(tx, 'manual_payment_submissions', id))) throw notFound()
   const s = await tx.manualPaymentSubmission.findUniqueOrThrow({ where: { id }, include: { student: { select: { name: true } } } })
   if (!ACTIVE.includes(s.status)) throw conflict('ALREADY_REVIEWED', `This payment was already ${s.status === 'APPROVED' ? 'approved' : 'rejected'}.`)
   // Separation of duties: nobody approves or rejects a payment they reported themselves.
@@ -292,7 +290,7 @@ export async function requestInfo(req: Request, id: string, message: string) {
 /** The payer answers a request for more information; the submission goes back for verification. */
 export async function respond(req: Request, id: string, input: { note?: string | undefined; reference?: string | undefined; proofFileId?: string | undefined }) {
   await prisma.$transaction(async (tx) => {
-    const [row] = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM manual_payment_submissions WHERE id = ${id}::uuid FOR UPDATE`
+    const row = await lockRow(tx, 'manual_payment_submissions', id)
     const s = row && (await tx.manualPaymentSubmission.findUnique({ where: { id } }))
     if (!s) throw notFound()
     await payerLink(req, s.studentId)
