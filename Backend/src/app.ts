@@ -25,6 +25,8 @@ import { auditRouter } from './modules/audit-logs/audit.routes.js'
 import { paymentSettingsRouter } from './modules/payment-settings/settings.routes.js'
 import { manualPaymentsRouter } from './modules/fees/manual.routes.js'
 import { orgRouter } from './modules/organization/org.routes.js'
+import { kioskAdminRouter, kioskDeviceRouter } from './modules/kiosk/kiosk.routes.js'
+import { staffAttendanceRouter } from './modules/staff-attendance/attendance.routes.js'
 
 export function createApp() {
   const app = express()
@@ -65,6 +67,8 @@ export function createApp() {
   })
   api.use('/health', healthRouter)
   api.use(rejectNulBytes)
+  // Kiosks authenticate as devices, not people, so they come before the session middleware.
+  api.use('/kiosk/device', kioskDeviceRouter)
   // Fully signed-in requests then run inside their active madrasa (src/tenancy).
   api.use(loadSession, csrfProtection, resolveMadrasa)
   // Modules a madrasa can switch off are refused by the API, not only hidden in the menu.
@@ -72,6 +76,7 @@ export function createApp() {
   api.use(['/exams', '/exam-results', '/grading', '/report-cards'], requireFeature('ASSESSMENTS'))
   api.use('/scheduled-reports', requireFeature('SCHEDULED_REPORTS'))
   api.use('/hostel', requireFeature('HOSTEL'))
+  api.use(['/kiosks', '/kiosk-settings', '/staff-shifts', '/staff-attendance'], requireFeature('STAFF_ATTENDANCE'))
   api.use('/auth', authRouter)
   api.use('/admin', adminRouter)
   api.use(peopleRouter)
@@ -84,6 +89,8 @@ export function createApp() {
   api.use(campusRouter)
   api.use(auditRouter)
   api.use(orgRouter)
+  api.use(kioskAdminRouter)
+  api.use(staffAttendanceRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

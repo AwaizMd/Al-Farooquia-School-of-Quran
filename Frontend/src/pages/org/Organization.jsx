@@ -14,6 +14,8 @@ const FEATURES = [
   ['FEES', 'Fees'], ['HOSTEL', 'Hostel'], ['ASSESSMENTS', 'Examinations'], ['SCHEDULED_REPORTS', 'Scheduled reports'],
   ['NAMAZ_TRACKING', 'Namaz tracking'], ['ACCOUNTS', 'Accounts'], ['STAFF_ATTENDANCE', 'Staff attendance'], ['BIOMETRIC', 'Biometric'],
 ]
+// Switches for modules the system does not have yet: turning them on would change nothing, so they stay off.
+const NOT_BUILT = new Set(['NAMAZ_TRACKING', 'ACCOUNTS', 'BIOMETRIC'])
 const BLANK = { code: '', name: '', shortName: '', address: '', phone: '', email: '', copyFrom: '' }
 
 export default function Organization() {
@@ -87,8 +89,8 @@ export default function Organization() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {FEATURES.map(([key, label]) => (
                     <label key={key} className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl border border-line px-3 text-[13.5px] font-semibold">
-                      {t(label)}
-                      <input type="checkbox" className="h-5 w-5 accent-primary-700" checked={!!features[m.id][key]} onChange={(e) => toggle(m, key, e.target.checked)} />
+                      <span>{t(label)}{NOT_BUILT.has(key) && <span className="block text-[12px] font-normal text-ink-muted">{t('Not built yet')}</span>}</span>
+                      <input type="checkbox" className="h-5 w-5 accent-primary-700" checked={!!features[m.id][key]} disabled={NOT_BUILT.has(key) && !features[m.id][key]} onChange={(e) => toggle(m, key, e.target.checked)} />
                     </label>
                   ))}
                 </div>

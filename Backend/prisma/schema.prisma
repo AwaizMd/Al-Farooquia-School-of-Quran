@@ -44,77 +44,86 @@ model InstitutionSettings {
 
 /// The trust that runs the madrasas. Exactly one row, id = 1.
 model Organization {
-  id         Int       @id @default(1)
-  name       String
-  shortName  String
-  nameArabic String
-  tagline    String
-  address    String
-  phone      String
-  email      String
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
-  madrasas   Madrasa[]
+  id            Int       @id @default(1)
+  name          String
+  shortName     String
+  nameArabic    String
+  tagline       String
+  address       String
+  phone         String
+  /// Kiosk settings every madrasa starts from (see src/modules/kiosk/kiosk.settings.ts).
+  kioskDefaults Json      @default("{}")
+  email         String
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  madrasas      Madrasa[]
 
   @@map("organizations")
 }
 
 /// One campus. Every campus record carries its madrasaId.
 model Madrasa {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  organizationId           Int                       @default(1)
+  id                         String                      @id @default(uuid()) @db.Uuid
+  organizationId             Int                         @default(1)
   /// Short, unique, upper-case (e.g. "MAIN", "HYD2").
-  code                     String                    @unique
-  name                     String
-  shortName                String
-  nameArabic               String?
-  address                  String
-  phone                    String
-  email                    String
-  active                   Boolean                   @default(true)
-  createdAt                DateTime                  @default(now()) @db.Timestamptz(3)
-  updatedAt                DateTime                  @updatedAt @db.Timestamptz(3)
-  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  settings                 MadrasaSettings?
-  features                 MadrasaFeature[]
-  memberships              MadrasaMembership[]
-  groups                   Group[]
-  staffProfiles            StaffProfile[]
-  groupMentorAssignments   GroupMentorAssignment[]
-  students                 Student[]
-  studentGuardians         StudentGuardian[]
-  groupEnrollments         GroupEnrollment[]
-  attendanceSessions       AttendanceSession[]
-  attendanceRecords        AttendanceRecord[]
-  attendanceCorrections    AttendanceCorrection[]
-  learningRecords          LearningRecord[]
-  learningRecordRevisions  LearningRecordRevision[]
-  gradingScales            GradingScale[]
-  gradeBands               GradeBand[]
-  exams                    Exam[]
-  examGroups               ExamGroup[]
-  examSubjects             ExamSubject[]
-  examResults              ExamResult[]
-  examMarks                ExamMark[]
-  feePlans                 FeePlan[]
-  invoices                 Invoice[]
-  payments                 Payment[]
-  paymentAllocations       PaymentAllocation[]
-  receipts                 Receipt[]
-  receiptSequences         ReceiptSequence[]
-  feeAdjustments           FeeAdjustment[]
-  refunds                  Refund[]
-  refundAllocations        RefundAllocation[]
-  concessions              Concession[]
-  hostelRooms              HostelRoom[]
-  hostelBeds               HostelBed[]
-  bedAssignments           BedAssignment[]
-  hostelRollEntrys         HostelRollEntry[]
-  reminderRules            ReminderRule[]
-  messageTemplates         MessageTemplate[]
-  scheduledReportConfigs   ScheduledReportConfig[]
-  reportRuns               ReportRun[]
-  paymentSettingss         PaymentSettings[]
-  manualPaymentSubmissions ManualPaymentSubmission[]
+  code                       String                      @unique
+  name                       String
+  shortName                  String
+  nameArabic                 String?
+  address                    String
+  phone                      String
+  email                      String
+  active                     Boolean                     @default(true)
+  createdAt                  DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                    @updatedAt @db.Timestamptz(3)
+  organization               Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  settings                   MadrasaSettings?
+  features                   MadrasaFeature[]
+  memberships                MadrasaMembership[]
+  homeUsers                  User[]                      @relation("HomeMadrasa")
+  kioskDevices               KioskDevice[]
+  kioskScans                 KioskScan[]
+  staffShifts                StaffShift[]
+  staffShiftAssignments      StaffShiftAssignment[]
+  staffAttendanceSessions    StaffAttendanceSession[]
+  staffAttendanceCorrections StaffAttendanceCorrection[]
+  groups                     Group[]
+  staffProfiles              StaffProfile[]
+  groupMentorAssignments     GroupMentorAssignment[]
+  students                   Student[]
+  studentGuardians           StudentGuardian[]
+  groupEnrollments           GroupEnrollment[]
+  attendanceSessions         AttendanceSession[]
+  attendanceRecords          AttendanceRecord[]
+  attendanceCorrections      AttendanceCorrection[]
+  learningRecords            LearningRecord[]
+  learningRecordRevisions    LearningRecordRevision[]
+  gradingScales              GradingScale[]
+  gradeBands                 GradeBand[]
+  exams                      Exam[]
+  examGroups                 ExamGroup[]
+  examSubjects               ExamSubject[]
+  examResults                ExamResult[]
+  examMarks                  ExamMark[]
+  feePlans                   FeePlan[]
+  invoices                   Invoice[]
+  payments                   Payment[]
+  paymentAllocations         PaymentAllocation[]
+  receipts                   Receipt[]
+  receiptSequences           ReceiptSequence[]
+  feeAdjustments             FeeAdjustment[]
+  refunds                    Refund[]
+  refundAllocations          RefundAllocation[]
+  concessions                Concession[]
+  hostelRooms                HostelRoom[]
+  hostelBeds                 HostelBed[]
+  bedAssignments             BedAssignment[]
+  hostelRollEntrys           HostelRollEntry[]
+  reminderRules              ReminderRule[]
+  messageTemplates           MessageTemplate[]
+  scheduledReportConfigs     ScheduledReportConfig[]
+  reportRuns                 ReportRun[]
+  paymentSettingss           PaymentSettings[]
+  manualPaymentSubmissions   ManualPaymentSubmission[]
 
   @@map("madrasas")
 }
@@ -224,6 +233,8 @@ model User {
   mfaRecoveryPending Boolean    @default(false)
   /// The madrasa where the account was created: it can manage the account even before any role or record links it there.
   homeMadrasaId      String?    @db.Uuid
+  /// Argon2id of the optional attendance PIN asked for at a kiosk.
+  attendancePinHash  String?
   createdAt          DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime   @updatedAt @db.Timestamptz(3)
 
@@ -241,6 +252,7 @@ model User {
   notificationPrefs NotificationPreference[]
 
   memberships MadrasaMembership[] @relation("MembershipUser")
+  homeMadrasa Madrasa?            @relation("HomeMadrasa", fields: [homeMadrasaId], references: [id], onDelete: SetNull)
 
   @@map("users")
 }
@@ -461,22 +473,28 @@ enum StaffStatus {
 /// Staff member (mentor, principal, warden). Optionally linked to a sign-in account.
 model StaffProfile {
   /// Owning madrasa. Filled from the request's madrasa (root tables) or copied from the parent row by a trigger.
-  madrasaId      String      @default(dbgenerated()) @db.Uuid
-  madrasa        Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_profiles_madrasa_id_fkey")
-  id             String      @id @default(uuid()) @db.Uuid
-  code           String
-  userId         String?     @db.Uuid
-  displayName    String
-  title          String
-  phone          String?
-  email          String?
-  joinedOn       DateTime?   @db.Date
-  status         StaffStatus @default(ACTIVE)
-  qualification  String?
-  specialisation String?
-  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime    @updatedAt @db.Timestamptz(3)
-  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  madrasaId          String                   @default(dbgenerated()) @db.Uuid
+  madrasa            Madrasa                  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_profiles_madrasa_id_fkey")
+  id                 String                   @id @default(uuid()) @db.Uuid
+  code               String
+  userId             String?                  @db.Uuid
+  displayName        String
+  title              String
+  phone              String?
+  email              String?
+  joinedOn           DateTime?                @db.Date
+  status             StaffStatus              @default(ACTIVE)
+  qualification      String?
+  /// QR codes issued before this time no longer work.
+  qrRevokedAt        DateTime?                @db.Timestamptz(3)
+  /// No late or early minutes are counted for this person (a special arrangement).
+  attendanceExempt   Boolean                  @default(false)
+  specialisation     String?
+  createdAt          DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                 @updatedAt @db.Timestamptz(3)
+  user               User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shiftAssignments   StaffShiftAssignment[]
+  attendanceSessions StaffAttendanceSession[]
 
   assignments     GroupMentorAssignment[]
   learningRecords LearningRecord[]
@@ -733,6 +751,8 @@ model LearningRecord {
   fromAyah        Int?                     @db.SmallInt
   toAyah          Int?                     @db.SmallInt
   juz             Int?                     @db.SmallInt
+  /// Amount of a Quran lesson in quarters of a safah (6 = 1.5 safah). Null on older ayah-range records and on Qaida.
+  safahQuarters   Int?                     @db.SmallInt
   qaidaLesson     Int?                     @db.SmallInt
   /// 1 (needs a lot of support) … 5 (excellent)
   performance     Int                      @db.SmallInt
@@ -1565,4 +1585,179 @@ model ManualPaymentSubmission {
   @@index([referenceKey])
   @@index([madrasaId])
   @@map("manual_payment_submissions")
+}
+
+// ---------------------------------------------------------------------------
+// Staff attendance and QR kiosks
+// ---------------------------------------------------------------------------
+
+enum KioskStatus {
+  /// Created or reset: waiting for a device to use its registration code.
+  PENDING
+  ACTIVE
+  /// Switched off by an administrator; can be switched on again.
+  DISABLED
+  /// Credential destroyed; needs a new registration code.
+  REVOKED
+}
+
+/// A phone or tablet at an entrance. It holds its own credential, never an administrator's.
+model KioskDevice {
+  madrasaId             String                   @default(dbgenerated()) @db.Uuid
+  madrasa               Madrasa                  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "kiosk_devices_madrasa_id_fkey")
+  id                    String                   @id @default(uuid()) @db.Uuid
+  name                  String
+  branch                String?
+  location              String?
+  status                KioskStatus              @default(PENDING)
+  /// HMAC of the one-time code; cleared when used.
+  registrationCodeHash  String?                  @unique
+  registrationExpiresAt DateTime?                @db.Timestamptz(3)
+  /// HMAC of the device credential (kept in an httpOnly cookie on the device).
+  tokenHash             String?                  @unique
+  /// The credential before the last rotation, accepted briefly so a lost response cannot lock a kiosk out.
+  previousTokenHash     String?                  @unique
+  previousTokenUntil    DateTime?                @db.Timestamptz(3)
+  credentialIssuedAt    DateTime?                @db.Timestamptz(3)
+  lastSeenAt            DateTime?                @db.Timestamptz(3)
+  lastScanAt            DateTime?                @db.Timestamptz(3)
+  userAgent             String?
+  /// Network addresses this kiosk may be used from (empty: any). A prefix like "203.0.113." matches a range.
+  allowedIps            String[]
+  /// This device's own setting overrides.
+  settings              Json                     @default("{}")
+  createdById           String?                  @db.Uuid
+  createdAt             DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                 @updatedAt @db.Timestamptz(3)
+  scans                 KioskScan[]
+  checkIns              StaffAttendanceSession[] @relation("CheckInKiosk")
+  checkOuts             StaffAttendanceSession[] @relation("CheckOutKiosk")
+
+  @@index([madrasaId])
+  @@map("kiosk_devices")
+}
+
+/// Every scan a kiosk submitted, accepted or not.
+model KioskScan {
+  madrasaId String      @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "kiosk_scans_madrasa_id_fkey")
+  id        String      @id @default(uuid()) @db.Uuid
+  kioskId   String      @db.Uuid
+  /// The kiosk's id for this attempt: repeating it returns the first answer (accepted scans only).
+  requestId String?
+  /// CHECK_IN, CHECK_OUT, or the reason it was refused.
+  outcome   String
+  ok        Boolean
+  staffId   String?     @db.Uuid
+  at        DateTime    @default(now()) @db.Timestamptz(3)
+  result    Json?
+  kiosk     KioskDevice @relation(fields: [kioskId], references: [id], onDelete: Restrict)
+
+  @@unique([kioskId, requestId])
+  @@index([madrasaId, at(sort: Desc)])
+  @@index([kioskId, at(sort: Desc)])
+  @@map("kiosk_scans")
+}
+
+/// A dynamic QR code that has been accepted. The primary key makes each code usable once, across all kiosks.
+model QrTokenUse {
+  jti       String   @id
+  userId    String   @db.Uuid
+  usedAt    DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("qr_token_uses")
+}
+
+model StaffShift {
+  madrasaId         String                   @default(dbgenerated()) @db.Uuid
+  madrasa           Madrasa                  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_shifts_madrasa_id_fkey")
+  id                String                   @id @default(uuid()) @db.Uuid
+  name              String
+  /// HH:MM in the madrasa's timezone. An end before the start runs past midnight.
+  startTime         String
+  endTime           String
+  graceLateMinutes  Int                      @default(10) @db.SmallInt
+  graceEarlyMinutes Int                      @default(0) @db.SmallInt
+  active            Boolean                  @default(true)
+  createdAt         DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @db.Timestamptz(3)
+  assignments       StaffShiftAssignment[]
+  sessions          StaffAttendanceSession[]
+
+  @@unique([madrasaId, name])
+  @@map("staff_shifts")
+}
+
+model StaffShiftAssignment {
+  madrasaId String       @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_shift_assignments_madrasa_id_fkey")
+  staffId   String       @db.Uuid
+  shiftId   String       @db.Uuid
+  staff     StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  shift     StaffShift   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, shiftId])
+  @@index([madrasaId])
+  @@map("staff_shift_assignments")
+}
+
+enum StaffSessionStatus {
+  OPEN
+  CLOSED
+  /// Never checked out: needs a correction before it counts as worked time.
+  MISSED_CHECKOUT
+}
+
+enum StaffSessionSource {
+  KIOSK
+  MANUAL
+}
+
+/// One check-in and its check-out. At most one OPEN per person (partial unique index).
+model StaffAttendanceSession {
+  madrasaId       String                      @default(dbgenerated()) @db.Uuid
+  madrasa         Madrasa                     @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_attendance_sessions_madrasa_id_fkey")
+  id              String                      @id @default(uuid()) @db.Uuid
+  staffId         String                      @db.Uuid
+  /// The madrasa's local date of the check-in.
+  date            DateTime                    @db.Date
+  shiftId         String?                     @db.Uuid
+  checkInAt       DateTime                    @db.Timestamptz(3)
+  checkOutAt      DateTime?                   @db.Timestamptz(3)
+  status          StaffSessionStatus          @default(OPEN)
+  source          StaffSessionSource          @default(KIOSK)
+  lateMinutes     Int                         @default(0)
+  earlyMinutes    Int                         @default(0)
+  workedMinutes   Int?
+  checkInKioskId  String?                     @db.Uuid
+  checkOutKioskId String?                     @db.Uuid
+  createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                    @updatedAt @db.Timestamptz(3)
+  staff           StaffProfile                @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  shift           StaffShift?                 @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  checkInKiosk    KioskDevice?                @relation("CheckInKiosk", fields: [checkInKioskId], references: [id], onDelete: SetNull)
+  checkOutKiosk   KioskDevice?                @relation("CheckOutKiosk", fields: [checkOutKioskId], references: [id], onDelete: SetNull)
+  corrections     StaffAttendanceCorrection[]
+
+  @@index([madrasaId, date])
+  @@index([staffId, date])
+  @@map("staff_attendance_sessions")
+}
+
+/// Every change to a saved session: what it was, who changed it and why.
+model StaffAttendanceCorrection {
+  madrasaId     String                 @default(dbgenerated()) @db.Uuid
+  madrasa       Madrasa                @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_attendance_corrections_madrasa_id_fkey")
+  id            String                 @id @default(uuid()) @db.Uuid
+  sessionId     String                 @db.Uuid
+  previous      Json?
+  reason        String
+  correctedById String?                @db.Uuid
+  at            DateTime               @default(now()) @db.Timestamptz(3)
+  session       StaffAttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("staff_attendance_corrections")
 }

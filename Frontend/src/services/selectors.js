@@ -123,10 +123,12 @@ export function currentLevel(state, idx, sid) {
   }
   if (st.track === 'alim') return { label: t("Hafiz · Daily Manzil + Alimiyyah studies"), progress: null, latest, juz: 30 }
   if (!latest) return { label: t("Not started"), progress: 0, latest }
-  const juz = juzOf(latest.surah, latest.toAyah)
-  const s = surahByNumber(latest.surah)
-  if (st.track === 'hifz') return { label: t("Juz {juz} · {surah}", { juz, surah: currentLang() === "ur" ? s.arabic : s.name }), juz, completedJuz: juz - 1, progress: Math.round(((juz - 1) / 30) * 100), surah: s, latest }
-  return { label: t("Nazira · Juz {juz} · {surah}", { juz, surah: currentLang() === "ur" ? s.arabic : s.name }), juz, progress: Math.round((juz / 30) * 100), surah: s, latest }
+  // Older lessons also name a Surah; lessons recorded in safah give only the Para.
+  const juz = latest.surah ? juzOf(latest.surah, latest.toAyah) : latest.juz
+  const s = latest.surah ? surahByNumber(latest.surah) : null
+  const where = s ? t("Juz {juz} · {surah}", { juz, surah: currentLang() === "ur" ? s.arabic : s.name }) : t("Para {juz}", { juz })
+  if (st.track === 'hifz') return { label: where, juz, completedJuz: juz - 1, progress: Math.round(((juz - 1) / 30) * 100), surah: s, latest }
+  return { label: `${t("Nazira")} · ${where}`, juz, progress: Math.round((juz / 30) * 100), surah: s, latest }
 }
 
 export const latestTarget = (idx, sid) => recordsFor(idx, sid).find((r) => isMain(idx, r))?.nextTarget || '—'

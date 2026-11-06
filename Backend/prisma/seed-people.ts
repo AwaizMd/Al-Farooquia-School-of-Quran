@@ -21,7 +21,9 @@ export async function seedPeople(prisma: PrismaClient) {
   const catalog = await load('catalog.js')
 
   for (const p of catalog.FEE_PLANS) {
-    await prisma.feePlan.create({ data: { code: p.id, name: p.name, amountMinor: p.amount * 100, currency: 'INR', cycle: 'MONTHLY', covers: p.covers } })
+    // A database prepared with db:setup already has these codes: update them instead.
+    const plan = { code: p.id, name: p.name, amountMinor: p.amount * 100, currency: 'INR', cycle: 'MONTHLY', covers: p.covers }
+    await prisma.feePlan.upsert({ where: { madrasaId_code: { madrasaId: activeMadrasaId(), code: p.id } }, update: plan, create: plan })
   }
   const staffIds: Record<string, string> = {}
   for (const m of people.MENTORS) {
@@ -33,7 +35,8 @@ export async function seedPeople(prisma: PrismaClient) {
 
   const groupIds: Record<string, string> = {}
   for (const g of people.GROUPS) {
-    const row = await prisma.group.create({ data: { code: g.id, name: g.name, short: g.short, track: g.track.toUpperCase() as Track, room: g.room, timing: g.timing, gender: GENDER[g.gender]! } })
+    const group = { code: g.id, name: g.name, short: g.short, track: g.track.toUpperCase() as Track, room: g.room, timing: g.timing, gender: GENDER[g.gender]! }
+    const row = await prisma.group.upsert({ where: { madrasaId_code: { madrasaId: activeMadrasaId(), code: g.id } }, update: group, create: group })
     groupIds[g.id] = row.id
     await prisma.groupMentorAssignment.create({ data: { groupId: row.id, staffId: staffIds[g.mentorId]!, startedAt: d('2026-04-01') } })
   }
@@ -94,7 +97,7 @@ export async function seedActivity(prisma: PrismaClient, today: string) {
   }
   const lessons = (demo.sabaq as Any[]).filter((r) => students[r.studentId]).map((r) => ({
     studentId: students[r.studentId]!.id, mentorId: staff[r.mentorId] ?? null, date: d(r.date), createdAt: new Date(`${r.createdAt}+05:30`),
-    category: r.category.toUpperCase(), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, qaidaLesson: r.qaidaLesson,
+    category: r.category.toUpperCase(), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, safahQuarters: r.safah == null ? null : r.safah * 4, qaidaLesson: r.qaidaLesson,
     performance: r.performance, mistakes: Math.min(99, r.mistakes), fluency: r.fluency, tajweed: r.tajweed.toUpperCase(), prevRevision: r.prevRevision.toUpperCase(),
     revisionQuality: r.revisionQuality, targetStatus: r.targetStatus.toUpperCase(), comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp,
   }))

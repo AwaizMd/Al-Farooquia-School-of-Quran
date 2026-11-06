@@ -79,6 +79,17 @@ export const plannedRangeFrom = (pos, n) => {
 
 export const rangeText = ({ surah, fromAyah, toAyah }) => `${surahByNumber(surah).name} ${fromAyah}–${toAyah}`
 
+/** Demo lessons are planned by position, then recorded the way a madrasa records them: a Para and an amount in safah. */
+function inSafah(r) {
+  if (r.category === 'qaida') return r
+  const ayahs = r.toAyah - r.fromAyah + 1
+  const revision = r.category === 'sabqi' || r.category === 'manzil'
+  const safah = Math.min(revision ? 10 : 3, Math.max(0.5, Math.round(ayahs / (revision ? 8 : 6)) / 2))
+  const portion = `Para ${r.juz} · ${safah} safah`
+  const nextTarget = revision ? (r.category === 'sabqi' ? r.nextTarget : 'Next Manzil portion as per weekly plan') : `${r.targetStatus === 'missed' ? 'Repeat' : 'Next'}: ${portion}`
+  return { ...r, surah: null, fromAyah: null, toAyah: null, safah, nextTarget }
+}
+
 export function generateSeed(today) {
   const rng = createRng(20261022)
   const settings = { ...DEFAULT_SETTINGS }
@@ -401,7 +412,7 @@ export function generateSeed(today) {
     students,
     attendance,
     hostelAttendance,
-    sabaq,
+    sabaq: sabaq.map(inSafah),
     feePlans: FEE_PLANS.map((p) => ({ ...p })),
     invoices,
     payments,

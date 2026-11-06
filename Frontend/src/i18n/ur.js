@@ -11,7 +11,7 @@ const UR = {
   'Category': 'زمرہ', 'Amount': 'رقم', 'Total': 'کل', 'Balance': 'بقایا', 'Method': 'طریقہ', 'Role': 'کردار', 'Action': 'عمل', 'Rating': 'درجہ',
   'Phone': 'فون', 'Email': 'ای میل', 'Address': 'پتہ', 'Password': 'پاس ورڈ', 'password': 'پاس ورڈ', 'Profile': 'پروفائل', 'History': 'تاریخچہ',
   'From': 'سے', 'To': 'تک', 'To:': 'بنام:', 'Avg': 'اوسط', 'Max': 'زیادہ سے زیادہ', 'Marks': 'نمبر', 'Subject': 'مضمون', 'Lesson': 'سبق',
-  'Juz': 'پارہ', 'Para / Juz': 'پارہ', 'Surah': 'سورۃ', 'Report': 'رپورٹ', 'Results': 'نتائج', 'Pending': 'باقی', 'Completed': 'مکمل',
+  'Juz': 'پارہ', 'Para / Juz': 'پارہ', 'Para': 'پارہ', 'safah': 'صفحہ', 'Select Para': 'پارہ منتخب کریں', 'Amount (safah)': 'مقدار (صفحات)', 'Common amounts': 'عام مقداریں', 'Para {juz}': 'پارہ {juz}', 'Surah': 'سورۃ', 'Report': 'رپورٹ', 'Results': 'نتائج', 'Pending': 'باقی', 'Completed': 'مکمل',
   'Upcoming': 'آئندہ', 'Current': 'جاری', 'Planned': 'منصوبہ بند', 'Demo': 'ڈیمو', 'Main': 'مرکزی', 'Menu': 'مینو', 'More': 'مزید', 'More menu': 'مزید مینو',
   'Close menu': 'مینو بند کریں', 'Quick navigation': 'فوری رسائی', 'Breadcrumb': 'راستہ', 'optional': 'اختیاری', 'Generated': 'تیار کردہ',
   'of': 'میں سے', 'and': 'اور', 'at': 'پر', 'for': 'برائے', 'in': 'میں', 'to': 'تک', 'via': 'بذریعہ', 'days': 'دن', 'items': 'امور', 'beds': 'بستر',

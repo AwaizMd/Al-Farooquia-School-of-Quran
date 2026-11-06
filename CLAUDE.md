@@ -93,6 +93,12 @@ MFA is mandatory for every staff and organization role (baseline cannot be lower
 
 Frontend (from `Frontend/`): `npm run dev` (:5173, proxies `/api`), `npm test`, `npm run build`.
 
+## Staff attendance and kiosks
+
+- Android QR kiosk (a separate lightweight page, `Frontend/kiosk.html`) and staff attendance: `Backend/docs/KIOSK.md`.
+- A kiosk authenticates with its own device cookie; the madrasa always comes from the device record, never from the client. Attendance is recorded only by the server after verifying a signed QR code. There is no offline attendance.
+- **Payroll, salaries and leave are not built.** Attendance only provides the monthly figures; never calculate salary deductions in the kiosk or attendance code.
+
 ## Change requests
 
 - **CR-01** (multi-madrasa, courses & classes, holidays, namaz, Razorpay removal,

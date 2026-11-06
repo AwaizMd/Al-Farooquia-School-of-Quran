@@ -257,7 +257,7 @@ export async function getMfaPolicy() {
 }
 
 /** Roles that must always use MFA. The policy can add roles to this list but never remove them. */
-export const MFA_BASELINE: readonly Role[] = ['SUPER_ADMIN', 'MADRASA_ADMIN', 'PRINCIPAL', 'COMMITTEE_MEMBER', 'CA', 'ACCOUNTANT', 'MENTOR']
+export const MFA_BASELINE: readonly Role[] = ['SUPER_ADMIN', 'MADRASA_ADMIN', 'PRINCIPAL', 'COMMITTEE_MEMBER', 'CA', 'ACCOUNTANT', 'MENTOR', 'WARDEN']
 
 export async function setMfaPolicy(req: Request, policy: { role: Role; required: boolean }[]) {
   const lowered = policy.filter((p) => !p.required && MFA_BASELINE.includes(p.role)).map((p) => p.role)

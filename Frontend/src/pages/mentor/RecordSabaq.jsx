@@ -9,8 +9,8 @@ import { post } from '../../api/client'
 import { toLesson } from '../../api/people'
 import { useToast } from '../../context/ToastContext'
 import { useVisibleStudents } from '../../hooks/useScope'
-import { PageHeader, Card, CardHeader, Avatar, Select, Input, Textarea, Segmented, Rating, Button, Notice, SearchInput, cx, Badge } from '../../components/ui'
-import { SURAHS, surahByNumber, juzOf, validAyahRange, QAIDA_LESSONS, rangeLabel } from '../../data/quran'
+import { PageHeader, Card, CardHeader, Avatar, Select, Input, Textarea, Segmented, Rating, Button, Notice, SearchInput, cx } from '../../components/ui'
+import { QAIDA_LESSONS, rangeLabel, safahLabel } from '../../data/quran'
 import { SABAQ_CATEGORIES, RATINGS, TAJWEED, PREV_REVISION, TARGET_STATUS } from '../../constants/labels'
 import { recordsFor, sabaqToday, isMain } from '../../services/selectors'
 import { todayISO, fmtDay } from '../../utils/date'
@@ -23,41 +23,26 @@ function suggest(idx, student, category) {
     const last = recs.find((r) => r.category === 'qaida')
     return { qaidaLesson: last ? (last.targetStatus === 'met' && last.nextTarget.startsWith('Qaida Lesson') ? Math.min(17, last.qaidaLesson + 1) : last.qaidaLesson) : 1 }
   }
-  const primary = recs.find((r) => r.category === (student.track === 'hifz' ? 'sabaq' : 'nazira')) || recs.find((r) => r.surah)
-  if (!primary) return { surah: 1, fromAyah: 1, toAyah: 7 }
-  const len = Math.max(1, primary.toAyah - primary.fromAyah + 1)
-  if (category === 'sabqi') {
-    const from = Math.max(1, primary.fromAyah - len * 3)
-    return primary.fromAyah > 1 ? { surah: primary.surah, fromAyah: from, toAyah: primary.toAyah } : { surah: primary.surah, fromAyah: 1, toAyah: primary.toAyah }
-  }
-  if (category === 'manzil') {
-    const s = Math.max(1, primary.surah - 1)
-    return { surah: s, fromAyah: 1, toAyah: Math.min(surahByNumber(s).ayahs, 20) }
-  }
-  // sabaq / nazira → continue from the last completed position
-  if (primary.targetStatus === 'missed') return { surah: primary.surah, fromAyah: primary.fromAyah, toAyah: primary.toAyah }
-  let surah = primary.surah
-  let from = primary.toAyah + 1
-  if (from > surahByNumber(surah).ayahs) { surah = Math.min(114, surah + 1); from = 1 }
-  return { surah, fromAyah: from, toAyah: Math.min(from + len - 1, surahByNumber(surah).ayahs) }
+  // Same Para and amount as the student's last lesson of this kind; the mentor adjusts it.
+  const last = recs.find((r) => r.category === category && r.juz) || recs.find((r) => r.juz)
+  return { juz: last?.juz ?? '', safah: recs.find((r) => r.category === category)?.safah ?? 1 }
 }
 
 const nextTargetText = (category, f) => {
   if (category === 'qaida') return f.targetStatus === 'met' ? `Qaida Lesson ${Math.min(17, f.qaidaLesson + 1)}` : `Repeat Qaida Lesson ${f.qaidaLesson}`
-  const s = surahByNumber(Number(f.surah))
-  if (!s || !f.toAyah) return ''
+  if (!f.juz || !f.safah) return ''
   if (category === 'sabqi') return 'Continue Sabqi of the last five lessons'
   if (category === 'manzil') return 'Next Manzil portion as per weekly plan'
-  if (f.targetStatus === 'missed') return `Repeat: ${s.name} ${f.fromAyah}–${f.toAyah}`
-  const len = Number(f.toAyah) - Number(f.fromAyah) + 1
-  let surah = s.number, from = Number(f.toAyah) + 1
-  if (f.targetStatus === 'partial') from = Number(f.fromAyah) + Math.max(1, Math.floor(len / 2))
-  if (from > s.ayahs) { surah = Math.min(114, surah + 1); from = 1 }
-  const ns = surahByNumber(surah)
-  return `${ns.name} ${from}–${Math.min(from + len - 1, ns.ayahs)}`
+  const portion = safahLabel(f.juz, f.safah)
+  if (f.targetStatus === 'missed') return `Repeat: ${portion}`
+  if (f.targetStatus === 'partial') return `Complete: ${portion}`
+  return `Next: ${portion}`
 }
 
-const blank = (date) => ({ date, surah: '', fromAyah: '', toAyah: '', qaidaLesson: 1, prevRevision: 'done', performance: 0, mistakes: 0, fluency: 0, tajweed: '', revisionQuality: 0, targetStatus: 'met', comments: '', nextTarget: '', followUp: false })
+const SAFAH_CHOICES = [0.5, 1, 1.5, 2, 3]
+const paras = Array.from({ length: 30 }, (_, i) => ({ value: i + 1, label: `Para ${i + 1}` }))
+
+const blank = (date) => ({ date, juz: '', safah: 1, qaidaLesson: 1, prevRevision: 'done', performance: 0, mistakes: 0, fluency: 0, tajweed: '', revisionQuality: 0, targetStatus: 'met', comments: '', nextTarget: '', followUp: false })
 
 export default function RecordSabaq() {
   const { state, idx, today } = useStore()
@@ -90,10 +75,8 @@ export default function RecordSabaq() {
   }, [studentId, category]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v?.target ? v.target.value : v }))
-  const usesAyah = category && SABAQ_CATEGORIES[category].usesAyah
-  const surah = surahByNumber(Number(f.surah))
-  const juz = usesAyah && surah && f.fromAyah ? juzOf(surah.number, Number(f.fromAyah)) : null
-  const autoTarget = category ? nextTargetText(category, { ...f, surah: Number(f.surah), fromAyah: Number(f.fromAyah), toAyah: Number(f.toAyah), qaidaLesson: Number(f.qaidaLesson) }) : ''
+  const usesSafah = category && SABAQ_CATEGORIES[category].usesSafah
+  const autoTarget = category ? nextTargetText(category, { ...f, juz: Number(f.juz), safah: Number(f.safah), qaidaLesson: Number(f.qaidaLesson) }) : ''
   const nextTarget = touchedTarget ? f.nextTarget : autoTarget
   const followSuggested = (f.performance && f.performance <= 2) || f.prevRevision === 'not' || f.targetStatus === 'missed'
   const duplicate = student && recordsFor(idx, student.id).some((r) => r.date === f.date && r.category === category)
@@ -109,12 +92,10 @@ export default function RecordSabaq() {
     if (!student) e.student = 'Choose a student.'
     if (!f.date) e.date = 'Choose a date.'
     else if (f.date > todayISO()) e.date = 'Records cannot be dated in the future.'
-    if (usesAyah) {
-      if (!f.surah) e.surah = 'Select the Surah.'
-      else {
-        const err = validAyahRange(Number(f.surah), Number(f.fromAyah), Number(f.toAyah))
-        if (err) e.ayah = err
-      }
+    if (usesSafah) {
+      if (!f.juz) e.juz = 'Choose the Para.'
+      const safah = Number(f.safah)
+      if (!(safah >= 0.25 && safah <= 100) || !Number.isInteger(safah * 4)) e.safah = 'Enter the safah in quarter steps, e.g. 0.5, 1 or 1.5.'
     } else if (!(f.qaidaLesson >= 1 && f.qaidaLesson <= 17)) e.qaida = 'Choose a Qaida lesson.'
     if (!f.performance) e.performance = 'Rate the lesson performance.'
     if (!f.fluency) e.fluency = 'Rate fluency.'
@@ -130,7 +111,7 @@ export default function RecordSabaq() {
     if (!validate()) { toast('Some details are missing', { type: 'error', description: 'Check the highlighted fields.' }); return }
     const body = {
       studentId: student.uuid, date: f.date, category: category.toUpperCase(),
-      ...(usesAyah ? { surah: Number(f.surah), fromAyah: Number(f.fromAyah), toAyah: Number(f.toAyah) } : { qaidaLesson: Number(f.qaidaLesson) }),
+      ...(usesSafah ? { juz: Number(f.juz), safah: Number(f.safah) } : { qaidaLesson: Number(f.qaidaLesson) }),
       performance: f.performance, mistakes: Number(f.mistakes), fluency: f.fluency, tajweed: f.tajweed.toUpperCase(), prevRevision: f.prevRevision.toUpperCase(),
       revisionQuality: f.revisionQuality || null, targetStatus: f.targetStatus.toUpperCase(), comments: f.comments.trim(), nextTarget: nextTarget.trim(), followUp: f.followUp,
     }
@@ -234,20 +215,17 @@ export default function RecordSabaq() {
 
             <Card className="p-4 sm:p-5">
               <h3 className="section-title mb-3">{t("Portion")}</h3>
-              {usesAyah ? (
-                <div className="grid gap-3.5 sm:grid-cols-[1fr_110px_110px]">
-                  <Select label={t("Surah")} value={f.surah} onChange={set('surah')} error={errors.surah} placeholder={t("Select Surah")}
-                    options={SURAHS.map((s) => ({ value: s.number, label: `${s.number}. ${s.name} — ${s.arabic} (${s.ayahs})` }))} />
-                  <Input label={t("From Ayah")} type="number" inputMode="numeric" min={1} max={surah?.ayahs} value={f.fromAyah} onChange={set('fromAyah')} />
-                  <Input label={t("To Ayah")} type="number" inputMode="numeric" min={1} max={surah?.ayahs} value={f.toAyah} onChange={set('toAyah')} />
-                  <div className="sm:col-span-3">
-                    {errors.ayah ? <p className="text-[12.5px] font-medium text-clay-600" role="alert">{errors.ayah}</p> : surah && (
-                      <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
-                        <span lang="ar" dir="rtl" className="text-[18px] text-primary-700">سورة {surah.arabic}</span>
-                        <Badge tone="gold">{t("Para / Juz")} {juz}</Badge>
-                        <span>{t('{n} ayahs in this Surah', { n: surah.ayahs })}</span>
-                      </p>
-                    )}
+              {usesSafah ? (
+                <div className="grid gap-3.5 sm:grid-cols-[200px_1fr]">
+                  <Select label={t("Para")} value={f.juz} onChange={set('juz')} error={errors.juz} placeholder={t("Select Para")} options={paras} />
+                  <div>
+                    <Input label={t("Amount (safah)")} type="number" inputMode="decimal" min={0.25} max={100} step={0.25} value={f.safah} onChange={set('safah')} error={errors.safah} />
+                    <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={t("Common amounts")}>
+                      {SAFAH_CHOICES.map((n) => (
+                        <button key={n} type="button" aria-pressed={Number(f.safah) === n} onClick={() => set('safah')(n)}
+                          className={cx('min-h-[40px] min-w-[52px] rounded-xl border px-3 text-[14px] font-semibold transition', Number(f.safah) === n ? 'border-primary-600 bg-primary-700 text-white' : 'border-line bg-white text-ink-soft hover:border-primary-300')}>{n}</button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -301,7 +279,7 @@ export default function RecordSabaq() {
               <h3 className="section-title mb-3">{t("Feedback & next step")}</h3>
               <Textarea label={t("Mentor comments")} value={f.comments} onChange={set('comments')} placeholder={t("Honest, constructive feedback for the student and parents")} />
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {QUICK_NOTES.map((n0) => t(n0)).map((n) => <button key={n} type="button" onClick={() => set('comments')(f.comments ? `${f.comments} ${n}` : n)} className="rounded-full border border-line bg-white px-2.5 py-1 text-[12px] text-ink-soft hover:border-primary-300">+ {n}</button>)}
+                {QUICK_NOTES.map((n0) => t(n0)).map((n) => <button key={n} type="button" onClick={() => set('comments')(f.comments ? `${f.comments} ${n}` : n)} className="rounded-full border border-line bg-white px-2.5 min-h-[36px] py-1 text-[12px] text-ink-soft hover:border-primary-300">+ {n}</button>)}
               </div>
               <div className="mt-4">
                 <Input label={t("Next learning target")} value={nextTarget} onChange={(e) => { setTouchedTarget(true); set('nextTarget')(e.target.value) }} error={errors.nextTarget}

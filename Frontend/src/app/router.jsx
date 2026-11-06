@@ -37,6 +37,9 @@ import InterimHome from '../pages/auth/InterimHome'
 import Users from '../pages/admin/Users'
 import Security from '../pages/account/Security'
 import Organization from '../pages/org/Organization'
+import Kiosks from '../pages/admin/Kiosks'
+import StaffAttendance from '../pages/admin/StaffAttendance'
+import MyAttendanceQr from '../pages/account/MyAttendanceQr'
 
 const Loading = () => <div className="flex min-h-dvh items-center justify-center bg-ivory" aria-busy="true"><span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-r-transparent" /></div>
 
@@ -120,6 +123,9 @@ export default function AppRoutes() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Gate path="/settings"><Settings /></Gate>} />
         <Route path="/admin/users" element={<Gate path="/admin/users"><Users /></Gate>} />
+        <Route path="/kiosks" element={<Gate path="/kiosks" perm="kiosks.manage"><Kiosks /></Gate>} />
+        <Route path="/staff-attendance" element={<Gate path="/staff-attendance" perm="staff_attendance.read"><StaffAttendance /></Gate>} />
+        <Route path="/my-attendance" element={<Gate path="/my-attendance"><MyAttendanceQr /></Gate>} />
         <Route path="/organization" element={<Gate path="/organization" perm="org.manage"><Organization /></Gate>} />
         <Route path="/account/security" element={<Security />} />
         <Route path="*" element={<NotFound />} />

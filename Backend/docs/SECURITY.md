@@ -27,6 +27,12 @@ This document lists what is implemented and tested, and what is not. Installing 
 | Configuration | Environment validated at start-up; production refuses insecure cookies, missing CORS origins, file-based email | `config/env.ts` |
 | Dependencies | `npm audit` reports 0 known vulnerabilities in the API and the web app (checked 2026-10-30, after the payment work) | — |
 
+## Kiosks and QR attendance
+
+See [KIOSK.md](KIOSK.md). In short: kiosks have their own hashed, rotating, `httpOnly` device credential; QR codes are signed, expire and work once; the server takes the madrasa from the device record; every scan is logged per kiosk; PINs are hashed and rate limited. A rotating QR doesn't prove the person is physically at the gate.
+
+The production `Permissions-Policy` allows the camera for this origin only, because the kiosk page needs it.
+
 ## Known limitations and remaining work
 
 - **External services are not live yet:**

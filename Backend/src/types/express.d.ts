@@ -1,3 +1,4 @@
+import type { KioskDevice } from '../generated/prisma/client.js'
 import type { Permission } from '../modules/auth/permissions.js'
 import type { Role, SessionStage } from '../generated/prisma/enums.js'
 import type { MadrasaRef } from '../tenancy/access.js'
@@ -19,6 +20,8 @@ declare global {
     interface Request {
       /** Set by loadSession when a valid, unrevoked session cookie is present (any stage). */
       auth?: AuthContext
+      /** Set by requireKiosk on the kiosk device routes. */
+      kiosk?: KioskDevice
     }
   }
 }

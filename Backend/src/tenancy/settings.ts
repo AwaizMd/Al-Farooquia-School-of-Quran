@@ -32,6 +32,8 @@ export const MadrasaConfig = z
         mentorRecording: z.boolean().default(false),
       })
       .default({ editWindowDays: 2, nudgeAt: null, mentorRecording: false }),
+    /** This madrasa's kiosk setting overrides (checked by src/modules/kiosk/kiosk.settings.ts). */
+    kiosk: z.record(z.string(), z.unknown()).default({}),
     /** Committee members may drill down to individual students (default: aggregates only). */
     committeeCanViewStudents: z.boolean().default(false),
   })

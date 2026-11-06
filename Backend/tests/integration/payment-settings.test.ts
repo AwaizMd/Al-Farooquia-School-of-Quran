@@ -1,6 +1,7 @@
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { institutionToday } from '../../src/common/clock.js'
+import { storage } from '../../src/integrations/storage/storage.js'
 import { inMadrasa, prisma, resetDatabase } from '../helpers/db.js'
 import { PASSWORD, app, client, type Client } from '../helpers/auth.js'
 import { seedPeopleFixture } from '../helpers/people.js'
@@ -82,6 +83,13 @@ describe('UPI QR code', () => {
     expect((await putQr(admin, Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]))).status).toBe(413)
     const ok = await putQr(admin, PNG)
     expect(ok.body.upi).toMatchObject({ hasQr: true, ready: true })
+  })
+
+  it('a QR record whose file has gone answers 404, not a server error', async () => {
+    await putQr(admin, PNG)
+    const stored = await prisma.storedFile.findFirstOrThrow({ orderBy: { createdAt: 'desc' } })
+    await storage().remove(stored.storageKey)
+    expect((await admin.get('/api/v1/payments/upi-qr')).status).toBe(404)
   })
 
   it('is shown only to payers once UPI is on; replacing and removing work; removal switches UPI off', async () => {

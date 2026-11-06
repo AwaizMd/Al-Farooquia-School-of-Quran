@@ -39,4 +39,6 @@ export const LIMITS = {
   forgotPerAccount: { name: 'forgot:acct', max: 3, windowSec: 60 * 60 },
   tokenPerIp: { name: 'token:ip', max: 20, windowSec: 15 * 60 },
   reauthPerUser: { name: 'reauth:user', max: 10, windowSec: 15 * 60 },
+  kioskScan: { name: 'kiosk:scan', max: 240, windowSec: 60 },
+  attendancePin: { name: 'kiosk:pin', max: 5, windowSec: 15 * 60 },
 } satisfies Record<string, Limit>

@@ -72,24 +72,28 @@ describe('attendance', () => {
 })
 
 const lesson = (studentId: string, extra: object = {}) => ({
-  studentId, date: today, category: 'SABAQ', surah: 2, fromAyah: 142, toAyah: 147, performance: 4, mistakes: 2, fluency: 4,
-  tajweed: 'GOOD', prevRevision: 'DONE', targetStatus: 'MET', comments: 'Good lesson.', nextTarget: 'Al-Baqarah 148–153', followUp: false, ...extra,
+  studentId, date: today, category: 'SABAQ', juz: 2, safah: 1.5, performance: 4, mistakes: 2, fluency: 4,
+  tajweed: 'GOOD', prevRevision: 'DONE', targetStatus: 'MET', comments: 'Good lesson.', nextTarget: 'Para 2, 1.5 safah', followUp: false, ...extra,
 })
 
 describe('learning records', () => {
-  it('the mentor records a Sabaq; the Juz is worked out on the server', async () => {
+  it('the mentor records a Sabaq in safah, in a Para', async () => {
     const m = await as('m1@x.test')
     const r = await m.post('/api/v1/learning-records', lesson(fx.students.ali.id))
     expect(r.status).toBe(201)
-    expect(r.body.record).toMatchObject({ admissionNo: 'S-1', juz: 2, mentor: { code: 'm1' } })
+    expect(r.body.record).toMatchObject({ admissionNo: 'S-1', juz: 2, safah: 1.5, surah: null, fromAyah: null, toAyah: null, mentor: { code: 'm1' } })
     expect(r.body.duplicateForDay).toBe(false)
     expect((await m.post('/api/v1/learning-records', lesson(fx.students.ali.id))).body.duplicateForDay).toBe(true) // warns, does not block
   })
 
-  it('validates ayah ranges, categories per track and dates', async () => {
+  it('validates the safah amount, the Para, categories per track and dates', async () => {
     const m = await as('m1@x.test')
-    const bad = await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, { surah: 1, fromAyah: 1, toAyah: 8 }))
-    expect(bad.body.error.details).toEqual([{ path: 'toAyah', message: 'This Surah has 7 ayahs.' }])
+    const path = async (extra: object) => (await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, extra))).body.error.details[0].path
+    for (const safah of [0, -1, 1.3, 101]) expect(await path({ safah }), String(safah)).toBe('safah')
+    expect(await path({ safah: undefined })).toBe('safah')
+    for (const juz of [0, 31, 1.5]) expect(await path({ juz }), String(juz)).toBe('juz')
+    expect(await path({ juz: undefined })).toBe('juz')
+    for (const safah of [0.25, 0.5, 0.75, 1, 1.5, 20]) expect((await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, { safah }))).body.record.safah).toBe(safah)
     expect((await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, { category: 'QAIDA', qaidaLesson: 3 }))).body.error.details[0].path).toBe('category')
     expect((await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, { date: addDaysIso(today, 1) }))).status).toBe(422)
     expect((await m.post('/api/v1/learning-records', lesson(fx.students.ali.id, { date: addDaysIso(today, -10) }))).body.error.details[0].message).toMatch(/last 7 days/)
@@ -116,6 +120,19 @@ describe('learning records', () => {
     await admin.patch(`/api/v1/learning-records/${id}`, { mistakes: 0, reason: 'Corrected after re-check' })
     const revs = (await admin.get(`/api/v1/learning-records/${id}/revisions`)).body.items
     expect(revs.map((r: { previous: { performance: number; mistakes: number } }) => [r.previous.performance, r.previous.mistakes])).toEqual([[4, 2], [5, 2]])
+  })
+
+  it('a lesson recorded by ayah range before safah existed is kept, and can still be edited', async () => {
+    const old = await prisma.learningRecord.create({ data: { studentId: fx.students.ali.id, recordedById: fx.users.mentor.id, date: new Date(`${today}T00:00:00Z`), category: 'SABAQ', surah: 2, fromAyah: 142, toAyah: 147, juz: 2, performance: 4, mistakes: 0, fluency: 4, tajweed: 'GOOD', prevRevision: 'DONE', targetStatus: 'MET', comments: '', nextTarget: 'x' } })
+    const r = await (await as('m1@x.test')).patch(`/api/v1/learning-records/${old.id}`, { comments: 'Edited.' })
+    expect(r.body).toMatchObject({ comments: 'Edited.', surah: 2, fromAyah: 142, toAyah: 147, safah: null })
+  })
+
+  it('the database rejects a Quran lesson with no amount and an impossible safah', async () => {
+    const base = { studentId: fx.students.ali.id, date: new Date(), category: 'SABAQ' as const, performance: 3, mistakes: 0, fluency: 3, tajweed: 'GOOD' as const, prevRevision: 'DONE' as const, targetStatus: 'MET' as const, comments: '', nextTarget: 'x' }
+    await expect(prisma.learningRecord.create({ data: { ...base, juz: 2 } })).rejects.toThrow()
+    await expect(prisma.learningRecord.create({ data: { ...base, juz: 2, safahQuarters: 0 } })).rejects.toThrow()
+    await expect(prisma.learningRecord.create({ data: { ...base, juz: 31, safahQuarters: 4 } })).rejects.toThrow()
   })
 
   it('the database rejects impossible ratings even if the API were bypassed', async () => {

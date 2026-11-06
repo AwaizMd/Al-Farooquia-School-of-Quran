@@ -6,8 +6,9 @@ Express 5 + TypeScript API and background worker for the Al Farooquia Madarsa Ma
 - Security controls and known limitations: [docs/SECURITY.md](docs/SECURITY.md)
 - Organization, madrasas, roles and the permission matrix: [docs/ROLES.md](docs/ROLES.md)
 - Change Request 01 (multi-madrasa and more): plan and status [docs/CR-01-PLAN.md](docs/CR-01-PLAN.md), open decisions [docs/DECISIONS.md](docs/DECISIONS.md)
+- Staff attendance and the Android QR kiosk, including how to set up a phone: [docs/KIOSK.md](docs/KIOSK.md)
 - Fee payments (bank transfer and UPI to each madrasa's own account, verified by the office; no gateway): [docs/PAYMENTS.md](docs/PAYMENTS.md)
-- QA audit (30 Oct 2026): what was tested, defects found and fixed, what remains: [docs/QA-REPORT.md](docs/QA-REPORT.md)
+- Latest QA audit (6 Nov 2026): [../QA/16-Production-Readiness-Report.md](../QA/16-Production-Readiness-Report.md). Earlier audit (30 Oct 2026): [docs/QA-REPORT.md](docs/QA-REPORT.md)
 - API reference: http://localhost:4000/api/docs when `API_DOCS_ENABLED=true` (OpenAPI 3.1 at `/api/docs/openapi.json`)
 
 ## Run locally
@@ -105,7 +106,7 @@ tests/                           unit, integration and security suites
 These are the defaults approved for this build. Each is noted in the code where it applies.
 
 - **Attendance:** present / late / absent / excused, and no automatic "absent". Mentors mark their own halqas for today; earlier days need `attendance.correct` and a reason.
-- **Lessons:** each category must match the student's track, and ayah ranges are checked against the Quran data. A second record on the same day gives a warning, not a block. Records are never overwritten.
+- **Lessons:** each category must match the student's track, and Quran lessons (Sabaq, Sabqi, Manzil, Nazira) record the Para and the amount in safah, in quarter steps (0.5, 1, 1.5). Older records keep their ayah range. A second record on the same day gives a warning, not a block. Records are never overwritten.
 - **Grading:**
 
   | Grade | Minimum score |

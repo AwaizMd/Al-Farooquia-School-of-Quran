@@ -83,7 +83,7 @@ const lower = (v) => (typeof v === 'string' ? v.toLowerCase() : v)
 /** API lesson record -> the shape the Sabaq screens use. */
 export const toLesson = (r) => ({
   id: r.id, uuid: r.id, studentId: r.admissionNo, mentorId: r.mentor?.code ?? null, date: r.date, createdAt: r.createdAt,
-  category: lower(r.category), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, qaidaLesson: r.qaidaLesson,
+  category: lower(r.category), surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, safah: r.safah ?? null, qaidaLesson: r.qaidaLesson,
   performance: r.performance, mistakes: r.mistakes, fluency: r.fluency, tajweed: lower(r.tajweed), prevRevision: lower(r.prevRevision),
   revisionQuality: r.revisionQuality, targetStatus: lower(r.targetStatus), comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp, edited: r.edited,
 })

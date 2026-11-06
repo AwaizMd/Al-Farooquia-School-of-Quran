@@ -115,7 +115,7 @@ export default function StudentProfile() {
               <Row icon={CalendarDays} k="Admitted" v={fmtDate(st.admissionDate)} />
               <Row icon={Phone} k="Phone" v={st.phone} />
               <Row icon={MapPin} k="Address" v={st.address || '—'} />
-              <Row icon={Wallet} k="Fee plan" v={`${t(state.feePlans.find((p) => p.id === st.feePlanId)?.name)}${st.concession ? ` · ${t(st.concession.type)}` : ''}`} />
+              {state.feePlans.some((p) => p.id === st.feePlanId) && <Row icon={Wallet} k="Fee plan" v={`${t(state.feePlans.find((p) => p.id === st.feePlanId)?.name)}${st.concession ? ` · ${t(st.concession.type)}` : ''}`} />}
               <Row icon={Droplet} k="Blood group" v={st.bloodGroup || '—'} />
               {st.medical && <Row icon={HeartPulse} k="Medical" v={st.medical} />}
             </dl>

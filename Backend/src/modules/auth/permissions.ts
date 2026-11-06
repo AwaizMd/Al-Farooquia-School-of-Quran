@@ -46,6 +46,12 @@ export const PERMISSIONS = [
   'accounts.write',
   'accounts.export',
   'accounts.close_period',
+  // Register, configure and monitor attendance kiosks.
+  'kiosks.manage',
+  // Everyone's attendance, shifts and monthly figures.
+  'staff_attendance.read',
+  // Correct attendance, manage shifts and exemptions, cancel QR codes.
+  'staff_attendance.manage',
   // Dashboards (CR-01 §7): aggregates; drill-down to individual students is separate.
   'analytics.read',
   'analytics.students',
@@ -56,19 +62,19 @@ const MADRASA_ADMIN: readonly Permission[] = [
   'users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read',
   'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record',
   'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'accounts.read', 'accounts.write',
-  'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students',
+  'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students', 'kiosks.manage', 'staff_attendance.read', 'staff_attendance.manage',
 ]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
   SUPER_ADMIN: ['org.manage', ...MADRASA_ADMIN],
   MADRASA_ADMIN,
   // Academic oversight with drill-down; sees fees and accounts as summaries only.
-  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students'],
+  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students', 'staff_attendance.read'],
   // Read-only, aggregates; drill-down only where the madrasa allows it (committeeCanViewStudents).
   COMMITTEE_MEMBER: ['analytics.read'],
   // Read-only accounts and exports. Never writes.
   CA: ['fees.read', 'accounts.read', 'accounts.export'],
-  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period'],
+  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'staff_attendance.read'],
   MENTOR: [],
   STUDENT: [],
   PARENT: [],

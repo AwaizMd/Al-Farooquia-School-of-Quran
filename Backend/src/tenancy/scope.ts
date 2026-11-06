@@ -8,13 +8,14 @@ import { tenant } from './context.js'
  */
 export const ROOT_MODELS = new Set<string>([
   'Group', 'StaffProfile', 'Student', 'GradingScale', 'Exam', 'FeePlan', 'Receipt', 'ReceiptSequence', 'HostelRoom',
-  'ReminderRule', 'MessageTemplate', 'ScheduledReportConfig', 'ReportRun', 'PaymentSettings',
+  'ReminderRule', 'MessageTemplate', 'ScheduledReportConfig', 'ReportRun', 'PaymentSettings', 'KioskDevice', 'StaffShift',
 ])
 /** Child tables: a database trigger copies "madrasaId" from the parent row (and rejects a mismatch). */
 export const CHILD_MODELS = new Set<string>([
   'GroupMentorAssignment', 'StudentGuardian', 'GroupEnrollment', 'AttendanceSession', 'AttendanceRecord', 'AttendanceCorrection', 'LearningRecord',
   'LearningRecordRevision', 'GradeBand', 'ExamGroup', 'ExamSubject', 'ExamResult', 'ExamMark', 'Invoice', 'Payment', 'PaymentAllocation', 'FeeAdjustment',
   'Refund', 'RefundAllocation', 'Concession', 'HostelBed', 'BedAssignment', 'HostelRollEntry', 'ManualPaymentSubmission',
+  'KioskScan', 'StaffShiftAssignment', 'StaffAttendanceSession', 'StaffAttendanceCorrection',
 ])
 export const isScoped = (model: string) => ROOT_MODELS.has(model) || CHILD_MODELS.has(model)
 

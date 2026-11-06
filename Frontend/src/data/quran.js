@@ -75,8 +75,13 @@ export const validAyahRange = (surah, from, to) => {
   return null
 }
 
+/** A Quran lesson's amount: "Para 3 · 1.5 safah". */
+export const safahLabel = (juz, safah) => `Para ${juz} · ${safah} safah`
+
 export const rangeLabel = (r) => {
   if (r.category === 'qaida') return `Qaida · Lesson ${r.qaidaLesson}`
+  if (r.safah != null) return safahLabel(r.juz, r.safah)
+  // Lessons recorded by ayah range before safah were introduced.
   const s = surahByNumber(r.surah)
   return `${s?.name} ${r.fromAyah}${r.toAyah !== r.fromAyah ? `–${r.toAyah}` : ''}`
 }

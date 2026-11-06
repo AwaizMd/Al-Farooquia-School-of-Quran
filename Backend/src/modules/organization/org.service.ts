@@ -73,11 +73,13 @@ export async function updateSettings(req: Request, patch: SettingsPatch) {
 export async function updateConfig(req: Request, patch: Record<string, unknown>) {
   const id = activeMadrasaId()
   const current = (await madrasaProfile(id)).config
+  // Kiosk settings have their own screen and their own checks (PUT /kiosk-settings).
+  if ('kiosk' in patch) throw new AppError(422, 'VALIDATION_FAILED', 'Some settings are invalid.', [{ path: 'kiosk', message: 'Change kiosk settings on the kiosk settings screen.' }])
   const merged: Record<string, unknown> = { ...current }
   for (const [k, v] of Object.entries(patch)) merged[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...(current[k as keyof MadrasaConfig] as object), ...(v as object) } : v
   const parsed = MadrasaConfig.safeParse(merged)
   if (!parsed.success) throw new AppError(422, 'VALIDATION_FAILED', 'Some settings are invalid.', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })))
-  await asOrg('update one madrasa’s configuration', () => prisma.madrasaSettings.update({ where: { madrasaId: id }, data: { config: parsed.data } }))
+  await asOrg('update one madrasa’s configuration', () => prisma.madrasaSettings.update({ where: { madrasaId: id }, data: { config: parsed.data as unknown as Prisma.InputJsonValue } }))
   await audit({ action: 'settings.config_changed', summary: `Configuration changed: ${Object.keys(patch).join(', ')}`, entityType: 'madrasa', entityId: id, metadata: { keys: Object.keys(patch) } }, req)
   forgetMadrasa(id)
   return (await madrasaProfile(id)).config

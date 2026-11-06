@@ -1,0 +1,17 @@
+{
+  "name": "Madarsa Attendance Kiosk",
+  "short_name": "Attendance",
+  "description": "Scans staff attendance QR codes at the madrasa entrance.",
+  "id": "/kiosk.html",
+  "start_url": "/kiosk.html",
+  "scope": "/kiosk",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#0F4A39",
+  "theme_color": "#0F4A39",
+  "icons": [
+    { "src": "/kiosk/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

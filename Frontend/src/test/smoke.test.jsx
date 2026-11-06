@@ -154,6 +154,46 @@ describe('CR-01: madrasas, roles and removed modules', () => {
   })
 })
 
+describe('staff attendance and kiosks', () => {
+  it('a mentor gets their own QR page, with the code from the server', async () => {
+    await boot('mentor', '/my-attendance')
+    const img = await screen.findByAltText('Your attendance QR code', {}, { timeout: 5000 })
+    expect(img.getAttribute('src')).toMatch(/^data:image/)
+    await screen.findByText(/New code in \d+ seconds/)
+  })
+
+  it('administrators manage kiosks; a principal reads attendance but cannot open kiosks', async () => {
+    await boot('admin', '/kiosks')
+    await screen.findByRole('heading', { name: 'Main Gate' }, { timeout: 5000 })
+    expect(screen.getByRole('button', { name: /add kiosk/i })).toBeTruthy()
+    cleanup()
+    await boot('principal', '/kiosks')
+    await screen.findByText('Not available for this role', {}, { timeout: 5000 })
+    await act(async () => { window.history.pushState({}, '', '/staff-attendance'); window.dispatchEvent(new PopStateEvent('popstate')) })
+    await screen.findByText('Qari Abdul Rahman Siddiqui', {}, { timeout: 5000 })
+    expect(screen.queryByRole('button', { name: /^correct$/i })).toBeNull() // read-only
+  })
+
+  it('the menu links to the QR page only for someone with a staff record', async () => {
+    const { visibleItems } = await import('../constants/navigation')
+    const item = [{ to: '/my-attendance', staffOnly: true }]
+    const auth = (staff) => ({ feature: () => true, can: () => true, user: { links: staff ? { staff: { code: 'm1' } } : {} } })
+    expect(visibleItems(item, auth(true))).toHaveLength(1)
+    expect(visibleItems(item, auth(false))).toHaveLength(0)
+  })
+})
+
+describe('recording a lesson', () => {
+  it('asks for the Para and the safah, not an ayah range', async () => {
+    await boot('mentor', '/sabaq/new?student=S-1001')
+    await screen.findByLabelText('Amount (safah)', {}, { timeout: 5000 })
+    expect(screen.getByLabelText('Para')).toBeTruthy()
+    expect(screen.queryByLabelText(/from ayah/i)).toBeNull()
+    expect(screen.queryByLabelText('Surah')).toBeNull()
+    expect(screen.getByRole('button', { name: '1.5' })).toBeTruthy()
+  })
+})
+
 describe('one-time links', () => {
   it('an invitation link still works when the page reads its token twice (StrictMode)', async () => {
     const { takeUrlToken } = await import('../api/client')

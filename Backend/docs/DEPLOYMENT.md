@@ -137,6 +137,10 @@ Test a restore on a separate machine at least once a term.
   - A provider adapter would go alongside `src/integrations/mail`.
 - **File storage on S3/R2:** create a private bucket and keys limited to that bucket, then set `STORAGE_DRIVER=s3`. Downloads use 5-minute signed URLs.
 
+## 7a. Attendance kiosks
+
+The kiosk page ships with the web build and needs no extra service. It needs HTTPS for the camera, which Caddy provides. Setup on a phone: [KIOSK.md](KIOSK.md). When you update the site, kiosks pick up the new version the next time they reload.
+
 ## 8. Monitoring
 
 - **Liveness:** `GET /api/v1/health/live` answers when the process is running.

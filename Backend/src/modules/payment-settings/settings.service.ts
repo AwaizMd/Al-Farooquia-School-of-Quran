@@ -4,7 +4,7 @@ import type { PaymentSettings } from '../../generated/prisma/client.js'
 import { AppError, notFound } from '../../common/errors.js'
 import { IMAGE_TYPES, checkUpload, safeFileName } from '../../common/fileTypes.js'
 import { prisma, type Tx } from '../../database/prisma.js'
-import { storage } from '../../integrations/storage/storage.js'
+import { readStored, storage } from '../../integrations/storage/storage.js'
 import { activeMadrasaId } from '../../tenancy/context.js'
 import { audit } from '../audit-logs/audit.service.js'
 
@@ -162,5 +162,5 @@ export async function removeUpiQr(req: Request) {
 export async function upiQrImage() {
   const s = await prisma.paymentSettings.findUnique({ where: { madrasaId: activeMadrasaId() }, include: { upiQr: true } })
   if (!s?.upiQr) throw notFound()
-  return { body: await storage().get(s.upiQr.storageKey), mimeType: s.upiQr.mimeType }
+  return { body: await readStored(s.upiQr.storageKey), mimeType: s.upiQr.mimeType }
 }

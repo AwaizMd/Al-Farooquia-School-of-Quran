@@ -27,7 +27,7 @@ export async function accessOf(userId: string) {
     ])
     const org = orgRoles.map((r) => r.role)
     const superAdmin = org.includes('SUPER_ADMIN')
-    const madrasas = await prisma.madrasa.findMany({ where: superAdmin ? { active: true } : { active: true, id: { in: [...new Set([...memberships.map((m) => m.madrasaId), ...kids.map((k) => k.madrasaId), ...self.map((s) => s.madrasaId)])] } }, orderBy: { name: 'asc' }, select: { id: true, code: true, name: true, shortName: true } })
+    const madrasas = await prisma.madrasa.findMany({ where: superAdmin ? { active: true } : { active: true, id: { in: [...new Set([...memberships.map((m) => m.madrasaId), ...kids.map((k) => k.madrasaId), ...self.map((s) => s.madrasaId)])] } }, orderBy: { createdAt: 'asc' }, select: { id: true, code: true, name: true, shortName: true } })
     const family = new Set<string>([...(org.includes('PARENT') ? kids.map((k) => k.madrasaId) : []), ...(org.includes('STUDENT') ? self.map((s) => s.madrasaId) : [])])
     const list: MadrasaRef[] = madrasas.map((m) => {
       const roles = new Set<Role>(memberships.filter((x) => x.madrasaId === m.id).map((x) => x.role))

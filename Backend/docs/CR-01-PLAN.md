@@ -101,3 +101,7 @@ in the pre-CR shape and checks that every row was kept and assigned.
 - **Raw SQL bypasses the extension.** Only row locks (`FOR UPDATE` by id) and sequences use raw SQL. Each one runs after a scoped lookup has already found the row. Any new raw SQL must filter on `madrasa_id` by hand.
 - **Nested `include`s are not filtered by the extension.** The triggers guarantee that children share their parent's madrasa, so this does not leak data.
 - **Background jobs run outside a request.** Every job loops over the madrasas with `withMadrasa(id, …)`.
+
+## Outside CR-01: staff attendance and kiosk (6 Nov 2026)
+
+Built from a separate specification; see [KIOSK.md](KIOSK.md). `BIOMETRIC` is still unused, and `STAFF_ATTENDANCE` now does something. Steps 2 to 8 above haven't started.

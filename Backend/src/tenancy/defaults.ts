@@ -38,7 +38,7 @@ export interface MadrasaBasics {
  */
 export async function createMadrasaDefaults(tx: Tx, madrasaId: string, basics: MadrasaBasics) {
   const config = MadrasaConfig.parse(basics.config ?? {})
-  await tx.madrasaSettings.create({ data: { madrasaId, currency: basics.currency, timezone: basics.timezone, weeklyOff: basics.weeklyOff, feeDueDay: basics.feeDueDay, config } })
+  await tx.madrasaSettings.create({ data: { madrasaId, currency: basics.currency, timezone: basics.timezone, weeklyOff: basics.weeklyOff, feeDueDay: basics.feeDueDay, config: config as unknown as Prisma.InputJsonValue } })
   await tx.madrasaFeature.createMany({ data: FEATURES.map((feature) => ({ madrasaId, feature, enabled: basics.features?.[feature] ?? FEATURE_DEFAULTS[feature] })) })
   await withMadrasa(madrasaId, async () => {
     await tx.gradingScale.create({ data: { version: 1, active: true, bands: { create: DEFAULT_GRADE_BANDS } } })

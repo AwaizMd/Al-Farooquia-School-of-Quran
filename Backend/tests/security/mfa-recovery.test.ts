@@ -9,7 +9,7 @@ beforeEach(async () => {
   await prisma.mfaPolicy.createMany({
     data: [
       { role: 'MADRASA_ADMIN', required: true }, { role: 'PRINCIPAL', required: true }, { role: 'MENTOR', required: true },
-      { role: 'STUDENT', required: false }, { role: 'PARENT', required: false }, { role: 'WARDEN', required: false },
+      { role: 'STUDENT', required: false }, { role: 'PARENT', required: false }, { role: 'WARDEN', required: true },
     ],
   })
   testOutbox.length = 0
@@ -207,16 +207,16 @@ describe('account administration guards', () => {
   it('lets administrators change the MFA policy (with re-authentication)', async () => {
     const { c, secret } = await adminSession()
     await reauth(c, secret)
-    const r = await c.put('/api/v1/admin/security/mfa-policy', { policy: [{ role: 'WARDEN', required: true }] })
-    expect(r.body.policy).toContainEqual({ role: 'WARDEN', required: true })
-    await makeUser({ email: 'w@x.test', roles: ['WARDEN'] })
+    const r = await c.put('/api/v1/admin/security/mfa-policy', { policy: [{ role: 'PARENT', required: true }] })
+    expect(r.body.policy).toContainEqual({ role: 'PARENT', required: true })
+    await makeUser({ email: 'w@x.test', roles: ['PARENT'] })
     expect((await client().post('/api/v1/auth/login', { identifier: 'w@x.test', password: PASSWORD })).body.stage).toBe('mfa_enrollment_required')
   })
 
-  it('never lets the policy make MFA optional for Admin, Principal or Mentor', async () => {
+  it('never lets the policy make MFA optional for Admin, Principal, Mentor or Warden', async () => {
     const { c, secret } = await adminSession()
     await reauth(c, secret)
-    for (const role of ['MADRASA_ADMIN', 'PRINCIPAL', 'MENTOR'] as const) {
+    for (const role of ['MADRASA_ADMIN', 'PRINCIPAL', 'MENTOR', 'WARDEN'] as const) {
       const r = await c.put('/api/v1/admin/security/mfa-policy', { policy: [{ role, required: false }] })
       expect(r.status).toBe(422)
     }

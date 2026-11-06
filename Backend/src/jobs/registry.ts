@@ -6,11 +6,12 @@ import { issueInvoices } from '../modules/fees/fees.service.js'
 import { deliverDue } from '../modules/notifications/notify.service.js'
 import { runReminders } from '../modules/notifications/reminders.service.js'
 import { tick } from '../modules/scheduled-reports/reports.service.js'
+import { closeStaleForMadrasa } from '../modules/staff-attendance/attendance.service.js'
 import { asOrg, withMadrasa } from '../tenancy/context.js'
 import { madrasaProfile } from '../tenancy/settings.js'
 
 /** Run a job once per active madrasa, each inside its own madrasa context (CR-01 §1). */
-async function forEachMadrasa(fn: (madrasaId: string) => Promise<unknown>, needs?: 'FEES' | 'SCHEDULED_REPORTS') {
+async function forEachMadrasa(fn: (madrasaId: string) => Promise<unknown>, needs?: 'FEES' | 'SCHEDULED_REPORTS' | 'STAFF_ATTENDANCE') {
   const madrasas = await asOrg('job fan-out over active madrasas', () => prisma.madrasa.findMany({ where: { active: true }, select: { id: true, code: true } }))
   const out: Record<string, unknown> = {}
   for (const m of madrasas) {
@@ -34,6 +35,11 @@ export const JOBS: JobDef[] = [
   { name: 'fees-reminders', cron: '0 9 * * *', description: 'Queue fee reminders due today', run: () => forEachMadrasa(() => runReminders(), 'FEES') },
   { name: 'progress-reports', cron: '5 * * * *', description: 'Send scheduled parent progress reports when due', run: () => forEachMadrasa(() => tick(), 'SCHEDULED_REPORTS') },
   // The outbox is shared; each message re-checks its own record (e.g. the invoice) before sending.
+  { name: 'staff-attendance-housekeeping', cron: '15 * * * *', description: 'Mark check-ins left open too long as missed check-outs; forget used QR codes that have expired', run: async () => {
+    const result = await forEachMadrasa(() => closeStaleForMadrasa(), 'STAFF_ATTENDANCE')
+    await prisma.qrTokenUse.deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 86_400_000) } } })
+    return result
+  } },
   { name: 'deliver-notifications', cron: '* * * * *', description: 'Send queued messages, with retries', run: () => asOrg('outbox delivery for every madrasa', () => deliverDue()) },
 ]
 

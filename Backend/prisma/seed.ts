@@ -56,6 +56,14 @@ await withMadrasa(main, async () => {
 
   // Bank transfer and UPI with clearly fake demo details, and a few reported payments.
   console.log(`Payments: ${await seedPayments(prisma, today)}`)
+
+  // Staff attendance: on for this madrasa, with one shift for every active staff member.
+  await prisma.madrasaFeature.upsert({ where: { madrasaId_feature: { madrasaId: main, feature: 'STAFF_ATTENDANCE' } }, update: { enabled: true }, create: { madrasaId: main, feature: 'STAFF_ATTENDANCE', enabled: true } })
+  if (!(await prisma.staffShift.count())) {
+    const shift = await prisma.staffShift.create({ data: { name: 'Day shift', startTime: '08:00', endTime: '14:00' } })
+    const staff = await prisma.staffProfile.findMany({ where: { status: 'ACTIVE' }, select: { id: true } })
+    await prisma.staffShiftAssignment.createMany({ data: staff.map((x) => ({ staffId: x.id, shiftId: shift.id })) })
+  }
 })
 await withMadrasa(girls, async () => {
   if (await prisma.group.count()) return

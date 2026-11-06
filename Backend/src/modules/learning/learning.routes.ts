@@ -24,9 +24,8 @@ const Range = z.object({ from: Iso.optional(), to: Iso.optional(), groupId: Id.o
 const Fields = {
   date: Iso,
   category: z.enum(LearningCategory),
-  surah: z.number().int().min(1).max(114).optional(),
-  fromAyah: z.number().int().min(1).max(286).optional(),
-  toAyah: z.number().int().min(1).max(286).optional(),
+  juz: z.number().int().min(1).max(30).optional(),
+  safah: z.number().min(0.25).max(100).multipleOf(0.25, 'Use quarter steps: 0.5, 1, 1.5…').optional(),
   qaidaLesson: z.number().int().min(1).max(17).optional(),
   performance: Rating,
   mistakes: z.number().int().min(0).max(99),

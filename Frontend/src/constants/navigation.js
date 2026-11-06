@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, UserRound, CalendarCheck, BookOpenCheck, ClipboardList, Wallet, BellRing, BedDouble,
-  BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck, BadgeCheck, Landmark, Building2,
+  BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck, BadgeCheck, Landmark, Building2, QrCode, Smartphone, CalendarClock,
 } from 'lucide-react'
 
 // Role-aware navigation for the madrasa the account is working in. Hiding a link is
@@ -8,6 +8,8 @@ import {
 // madrasa has switched off. `feature` hides an item when that module is off;
 // `perm` hides it without that permission.
 const ORG = { to: '/organization', label: 'Madrasas', icon: Building2, perm: 'org.manage' }
+const MY_QR = { to: '/my-attendance', label: 'My Attendance QR', icon: QrCode, feature: 'STAFF_ATTENDANCE', staffOnly: true }
+const STAFF_ATT = { to: '/staff-attendance', label: 'Staff Attendance', icon: CalendarClock, feature: 'STAFF_ATTENDANCE' }
 
 export const NAV = {
   admin: {
@@ -16,6 +18,9 @@ export const NAV = {
       { title: 'People', items: [
         { to: '/students', label: 'Students', icon: Users },
         { to: '/mentors', label: 'Mentors', icon: UserRound },
+        STAFF_ATT,
+        { to: '/kiosks', label: 'Attendance Kiosks', icon: Smartphone, feature: 'STAFF_ATTENDANCE' },
+        MY_QR,
       ] },
       { title: 'Learning', items: [
         { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
@@ -55,6 +60,8 @@ export const NAV = {
       { title: 'People', items: [
         { to: '/students', label: 'Students', icon: Users },
         { to: '/mentors', label: 'Mentors', icon: UserRound },
+        STAFF_ATT,
+        MY_QR,
       ] },
       { title: 'Learning', items: [
         { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
@@ -84,7 +91,7 @@ export const NAV = {
         { to: '/payment-verification', label: 'Payment Verification', icon: BadgeCheck, feature: 'FEES' },
         { to: '/reminders', label: 'Fee Reminders', icon: BellRing, feature: 'FEES' },
       ] },
-      { title: 'People', items: [{ to: '/students', label: 'Students', icon: Users }] },
+      { title: 'People', items: [{ to: '/students', label: 'Students', icon: Users }, STAFF_ATT, MY_QR] },
     ],
     bottom: [
       { to: '/dashboard', label: 'Fees', icon: Wallet },
@@ -126,6 +133,7 @@ export const NAV = {
       { title: 'Hostel', items: [
         { to: '/dashboard', label: 'Hostel', icon: BedDouble },
         { to: '/notifications', label: 'Notifications', icon: BellRing },
+        MY_QR,
       ] },
     ],
     bottom: [
@@ -145,6 +153,7 @@ export const NAV = {
       { title: 'Teaching', items: [
         { to: '/exams', label: 'Tests & Marks', icon: ClipboardList, feature: 'ASSESSMENTS' },
         { to: '/progress-report', label: 'Progress Reports', icon: FileText },
+        MY_QR,
       ] },
     ],
     bottom: [
@@ -192,7 +201,7 @@ export const NAV = {
 }
 
 /** Items the account should see: the module is on in this madrasa and the permission is held. */
-export const visibleItems = (items, auth) => items.filter((it) => (!it.feature || auth.feature(it.feature)) && (!it.perm || auth.can(it.perm)))
+export const visibleItems = (items, auth) => items.filter((it) => (!it.feature || auth.feature(it.feature)) && (!it.perm || auth.can(it.perm)) && (!it.staffOnly || !!auth.user?.links?.staff))
 
 export const ROUTE_ROLES = {
   '/students': ['admin', 'principal', 'mentor', 'accountant'],
@@ -210,6 +219,9 @@ export const ROUTE_ROLES = {
   '/settings': ['admin'],
   '/admin/users': ['admin'],
   '/organization': ['admin'],
+  '/kiosks': ['admin'],
+  '/staff-attendance': ['admin', 'principal', 'accountant'],
+  '/my-attendance': ['admin', 'principal', 'accountant', 'mentor', 'warden'],
   '/journey': ['student', 'parent'],
   '/progress-report': ['admin', 'principal', 'mentor', 'parent'],
   '/exams': ['admin', 'principal', 'mentor', 'student', 'parent'],
@@ -221,5 +233,5 @@ export const PAGE_TITLES = [
   ['/attendance', 'Attendance'], ['/sabaq/new', 'Record Sabaq'], ['/sabaq', 'Sabaq Records'], ['/journey', 'Learning'],
   ['/progress-report', 'Progress Report'], ['/exams', 'Examinations'], ['/report-card', 'Report Card'], ['/fees', 'Fees'],
   ['/reminders', 'Fee Reminders'], ['/payment-settings', 'Fee Payment Settings'], ['/payment-verification', 'Payment Verification'], ['/hostel', 'Hostel'], ['/reports', 'Reports'],
-  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/organization', 'Madrasas'], ['/account/security', 'Account security'],
+  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/organization', 'Madrasas'], ['/kiosks', 'Attendance Kiosks'], ['/staff-attendance', 'Staff Attendance'], ['/my-attendance', 'My Attendance QR'], ['/account/security', 'Account security'],
 ]

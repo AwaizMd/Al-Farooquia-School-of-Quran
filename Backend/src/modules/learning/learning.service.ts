@@ -8,7 +8,7 @@ import { academicScope } from '../../policies/students.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { notifyStudentFamily } from '../notifications/notify.service.js'
 import { isoDate, toDate } from '../students/students.service.js'
-import { QAIDA_LESSON_COUNT, ayahRangeError, juzOf } from './quran.js'
+import { QAIDA_LESSON_COUNT } from './quran.js'
 
 /** Which kinds of record each learning track uses (matches the web app's SABAQ_CATEGORIES). */
 export const CATEGORIES_FOR_TRACK: Record<Track, LearningCategory[]> = {
@@ -26,9 +26,10 @@ export interface LearningInput {
   studentId: string
   date: string
   category: LearningCategory
-  surah?: number | undefined
-  fromAyah?: number | undefined
-  toAyah?: number | undefined
+  /** Para (Juz) of the lesson. */
+  juz?: number | undefined
+  /** Amount in safah (pages), in quarter steps: 0.5, 1, 1.5… */
+  safah?: number | undefined
   qaidaLesson?: number | undefined
   performance: number
   mistakes: number
@@ -48,12 +49,11 @@ function shape(input: LearningInput, track: Track) {
   if (!CATEGORIES_FOR_TRACK[track].includes(input.category)) throw fieldError('category', `This category is not used for the ${track.toLowerCase()} track.`)
   if (input.category === 'QAIDA') {
     if (!input.qaidaLesson || input.qaidaLesson < 1 || input.qaidaLesson > QAIDA_LESSON_COUNT) throw fieldError('qaidaLesson', `Choose a lesson from 1 to ${QAIDA_LESSON_COUNT}.`)
-    return { surah: null, fromAyah: null, toAyah: null, juz: null, qaidaLesson: input.qaidaLesson }
+    return { surah: null, fromAyah: null, toAyah: null, juz: null, safahQuarters: null, qaidaLesson: input.qaidaLesson }
   }
-  if (!input.surah || !input.fromAyah || !input.toAyah) throw fieldError('surah', 'Choose the Surah and ayah range.')
-  const err = ayahRangeError(input.surah, input.fromAyah, input.toAyah)
-  if (err) throw fieldError(err.startsWith('Select') ? 'surah' : err.startsWith('Starting') ? 'fromAyah' : 'toAyah', err)
-  return { surah: input.surah, fromAyah: input.fromAyah, toAyah: input.toAyah, juz: juzOf(input.surah, input.fromAyah), qaidaLesson: null }
+  if (!input.juz) throw fieldError('juz', 'Choose the Para.')
+  if (!input.safah) throw fieldError('safah', 'Enter how many safah, e.g. 1 or 1.5.')
+  return { surah: null, fromAyah: null, toAyah: null, juz: input.juz, safahQuarters: Math.round(input.safah * 4), qaidaLesson: null }
 }
 
 async function authorise(req: Request, studentId: string) {
@@ -76,7 +76,7 @@ type Row = Prisma.LearningRecordGetPayload<{ include: typeof INCLUDE }>
 
 export const view = (r: Row) => ({
   id: r.id, studentId: r.studentId, admissionNo: r.student.admissionNo, studentName: r.student.name, mentor: r.mentor, date: isoDate(r.date), createdAt: r.createdAt,
-  category: r.category, surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, qaidaLesson: r.qaidaLesson,
+  category: r.category, surah: r.surah, fromAyah: r.fromAyah, toAyah: r.toAyah, juz: r.juz, safah: r.safahQuarters === null ? null : r.safahQuarters / 4, qaidaLesson: r.qaidaLesson,
   performance: r.performance, mistakes: r.mistakes, fluency: r.fluency, tajweed: r.tajweed, prevRevision: r.prevRevision, revisionQuality: r.revisionQuality,
   targetStatus: r.targetStatus, comments: r.comments, nextTarget: r.nextTarget, followUp: r.followUp, edited: r._count.revisions > 0,
 })
@@ -119,7 +119,9 @@ export async function updateRecord(req: Request, id: string, patch: Partial<Omit
   if (manage && !reason) throw fieldError('reason', 'Give a reason for changing a saved record.')
   const merged: LearningInput = { ...view(existing), studentId: existing.studentId, date: patch.date ?? isoDate(existing.date)!, ...stripUndefined(patch) } as LearningInput
   if (merged.date > today) throw fieldError('date', 'The lesson date cannot be in the future.')
-  const parts = shape(merged, student.group.track)
+  // A lesson recorded by ayah range before safah existed keeps its range unless a safah is given.
+  const keepsRange = existing.surah !== null && patch.safah === undefined && merged.category === existing.category
+  const parts = keepsRange ? {} : shape(merged, student.group.track)
   const updated = await prisma.$transaction(async (tx) => {
     await tx.learningRecordRevision.create({ data: { recordId: id, previous: JSON.parse(JSON.stringify(view(existing))), reason: reason ?? null, editedById: req.auth!.user.id } })
     const r = await tx.learningRecord.update({

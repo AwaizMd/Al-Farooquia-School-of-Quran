@@ -1,0 +1,66 @@
+/* Attendance kiosk. Plain CSS and no animation: it has to run well on old phones. */
+:root { --forest: #0F4A39; --ink: #14352A; --muted: #4A514C; --line: #D8D1C2; --paper: #FAF7F0; --good: #155C46; --bad: #9A4333; }
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+h1, p { margin: 0; }
+.k-muted { color: var(--muted); }
+
+.k-app { position: relative; min-height: 100%; display: flex; flex-direction: column; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom)); }
+.k-dim { opacity: 0.35; }
+.k-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+.k-head h1 { font-size: 22px; line-height: 1.2; }
+.k-inst, .k-branch { font-size: 14px; color: var(--muted); font-weight: 600; }
+.k-clock { text-align: end; font-size: 13px; color: var(--muted); }
+.k-time { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.k-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.k-chip { padding: 5px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: #fff; color: var(--muted); font-family: inherit; }
+.k-good { color: var(--good); border-color: #A6CFBE; background: #EAF3EF; }
+.k-bad { color: var(--bad); border-color: #E4B9AC; background: #FBF0EC; }
+.k-device { min-height: 32px; }
+
+.k-camera { position: relative; flex: 1 1 auto; min-height: 280px; border-radius: 16px; overflow: hidden; background: #000; }
+.k-camera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.k-camera-small { flex: none; height: 300px; }
+.k-frame { position: absolute; top: 50%; left: 50%; width: min(66vw, 300px); height: min(66vw, 300px); transform: translate(-50%, -50%); border: 4px solid #fff; border-radius: 16px; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.35); }
+.k-camera-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; color: #fff; text-align: center; font-size: 17px; }
+.k-instructions { text-align: center; font-size: 18px; font-weight: 700; }
+.k-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.k-btn { min-height: 56px; padding: 0 22px; border-radius: 14px; border: 2px solid var(--forest); background: var(--forest); color: #fff; font: inherit; font-size: 18px; font-weight: 800; }
+.k-btn:disabled { opacity: 0.5; }
+.k-btn-quiet { background: #fff; color: var(--forest); }
+.k-on { background: var(--forest); color: #fff; }
+.k-danger { background: var(--bad); border-color: var(--bad); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #D9BE85; outline-offset: 2px; }
+.k-alert { padding: 10px 12px; border-radius: 12px; background: #FBF0EC; border: 1px solid #E4B9AC; color: #7C3528; font-weight: 600; }
+.k-offline { font-size: 16px; }
+
+.k-overlay { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; background: var(--paper); text-align: center; overflow-y: auto; }
+.k-big { font-size: 26px; font-weight: 800; }
+.k-mark { width: 84px; height: 84px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-size: 48px; font-weight: 800; }
+.k-success { background: #EAF3EF; }
+.k-success .k-mark { background: var(--good); }
+.k-error { background: #FBF0EC; }
+.k-error .k-mark { background: var(--bad); }
+.k-reason { font-size: 20px; font-weight: 600; max-width: 28em; }
+.k-welcome { font-size: 22px; font-weight: 700; }
+.k-facts { display: grid; gap: 6px; width: min(100%, 420px); margin: 0; text-align: start; }
+.k-facts div { display: flex; justify-content: space-between; gap: 16px; padding: 8px 12px; background: #fff; border-radius: 10px; }
+.k-facts dt { color: var(--muted); font-weight: 600; }
+.k-facts dd { margin: 0; font-weight: 800; text-align: end; }
+
+.k-pin .k-dots { min-height: 36px; font-size: 32px; letter-spacing: 8px; }
+.k-pad { display: grid; grid-template-columns: repeat(3, 84px); gap: 10px; }
+.k-pad button { height: 72px; border-radius: 14px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: inherit; font-size: 26px; font-weight: 800; }
+.k-pad .k-ok { background: var(--forest); color: #fff; }
+.k-pad .k-ok:disabled { opacity: 0.5; }
+
+.k-center, .k-register { min-height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 24px 20px; }
+.k-center { align-items: center; justify-content: center; text-align: center; }
+.k-register { max-width: 480px; margin: 0 auto; justify-content: center; }
+.k-register form { display: flex; flex-direction: column; gap: 10px; }
+label { font-weight: 700; }
+input, select { width: 100%; min-height: 56px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: inherit; font-size: 22px; letter-spacing: 1px; }
+select { font-size: 17px; letter-spacing: 0; }
+.k-field { width: min(100%, 420px); display: flex; flex-direction: column; gap: 6px; text-align: start; }

@@ -10,6 +10,7 @@ import { fmtDay, fmtLong, relativeDay } from '../../utils/date'
 
 export function RecordRange({ r, showArabic = true }) {
   if (r.category === 'qaida') return <span>{t("Lesson")} {r.qaidaLesson} · <span className="text-ink-muted">{t(QAIDA_LESSONS[r.qaidaLesson - 1])}</span></span>
+  if (r.safah != null) return <span>{t("Para")} {r.juz} · {r.safah} {t("safah")}</span>
   const s = surahByNumber(r.surah)
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-1.5">

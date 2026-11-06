@@ -161,7 +161,7 @@ describe('scheduled progress reports', () => {
 describe('in-app notifications and events', () => {
   it('families hear about new lessons and absences; each sees only their own notifications', async () => {
     const m = await as('m1@x.test')
-    await m.post('/api/v1/learning-records', { studentId: fx.students.ali.id, date: today, category: 'SABAQ', surah: 2, fromAyah: 1, toAyah: 5, performance: 4, mistakes: 1, fluency: 4, tajweed: 'GOOD', prevRevision: 'DONE', targetStatus: 'MET', comments: 'Good', nextTarget: 'Al-Baqarah 6–10', followUp: false })
+    await m.post('/api/v1/learning-records', { studentId: fx.students.ali.id, date: today, category: 'SABAQ', juz: 1, safah: 1, performance: 4, mistakes: 1, fluency: 4, tajweed: 'GOOD', prevRevision: 'DONE', targetStatus: 'MET', comments: 'Good', nextTarget: 'Al-Baqarah 6–10', followUp: false })
     await m.post('/api/v1/attendance', { groupId: fx.groups.gA.id, date: today, records: [{ studentId: fx.students.bilal.id, status: 'ABSENT' }] })
     const p1 = await as('p1@x.test')
     const mine = (await p1.get('/api/v1/notifications')).body.items

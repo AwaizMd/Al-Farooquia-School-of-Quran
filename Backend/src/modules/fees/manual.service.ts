@@ -8,7 +8,7 @@ import { institutionToday } from '../../common/clock.js'
 import { IMAGE_TYPES, PDF_TYPE, checkUpload, safeFileName } from '../../common/fileTypes.js'
 import { consume } from '../../common/rateLimit.js'
 import { prisma, type Tx } from '../../database/prisma.js'
-import { storage } from '../../integrations/storage/storage.js'
+import { readStored, storage } from '../../integrations/storage/storage.js'
 import { usersWith } from '../../tenancy/access.js'
 import { audit } from '../audit-logs/audit.service.js'
 import { money, notifyStudentFamily, notifyUsers } from '../notifications/notify.service.js'
@@ -223,7 +223,7 @@ export async function proofFile(req: Request, id: string) {
   const r = await findVisible(req, id)
   if (!r.proofFileId) throw notFound()
   const f = await prisma.storedFile.findUniqueOrThrow({ where: { id: r.proofFileId } })
-  return { body: await storage().get(f.storageKey), name: f.originalName, mimeType: f.mimeType }
+  return { body: await readStored(f.storageKey), name: f.originalName, mimeType: f.mimeType }
 }
 
 // ---------- Reviewing ----------

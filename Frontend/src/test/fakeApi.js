@@ -45,15 +45,15 @@ export const PERSONAS = {
 
 const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
-const ADMIN_PERMS = ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students']
+const ADMIN_PERMS = ['users.read', 'users.manage', 'mfa.reset', 'security.manage', 'audit.read', 'settings.manage', 'students.read', 'students.write', 'guardians.read', 'staff.read', 'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record', 'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students', 'kiosks.manage', 'staff_attendance.read', 'staff_attendance.manage']
 const PERMS = {
   SUPER_ADMIN: ['org.manage', ...ADMIN_PERMS], MADRASA_ADMIN: ADMIN_PERMS,
-  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students'],
+  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students', 'staff_attendance.read'],
   COMMITTEE_MEMBER: ['analytics.read'], CA: ['fees.read', 'accounts.read', 'accounts.export'],
-  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period'],
+  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'staff_attendance.read'],
   MENTOR: [], STUDENT: [], PARENT: [], WARDEN: ['hostel.read', 'hostel.manage'],
 }
-const FEATURES = { HOSTEL: true, FEES: true, ACCOUNTS: false, NAMAZ_TRACKING: false, STAFF_ATTENDANCE: false, ASSESSMENTS: true, SCHEDULED_REPORTS: true, BIOMETRIC: false }
+const FEATURES = { HOSTEL: true, FEES: true, ACCOUNTS: false, NAMAZ_TRACKING: false, STAFF_ATTENDANCE: true, ASSESSMENTS: true, SCHEDULED_REPORTS: true, BIOMETRIC: false }
 export const MADRASAS = [
   { id: '00000000-0000-4000-8000-00000000aa01', code: 'MAIN', name: 'Al Farooquia School of Quran', shortName: 'Al Farooquia' },
   { id: '00000000-0000-4000-8000-00000000aa02', code: 'GIRLS', name: 'Al Farooquia Girls Campus', shortName: 'Girls Campus' },
@@ -117,6 +117,13 @@ export function fakeFetch(personaName) {
     }
     if (path === '/grading') return json({ version: 1, bands: demo.grading })
     if (path === '/auth/sessions') return json({ items: [] })
+    if (path === '/kiosks') return json({ from: todayISO(), to: todayISO(), branches: ['Boys Wing'], totals: { registered: 1, active: 1, offline: 0, deactivated: 0, scans: 3, successful: 2, failed: 1, duplicates: 1, lastSyncAt: null }, items: [{ id: 'k1', name: 'Main Gate', branch: 'Boys Wing', location: null, status: 'ACTIVE', online: true, allowedIps: [], settings: {}, lastSeenAt: new Date().toISOString(), lastScanAt: new Date().toISOString(), scans: 3, successful: 2, failed: 1, duplicates: 1 }] })
+    if (path === '/kiosk-settings') { const effective = { mode: 'AUTO', checkInWindow: null, checkOutWindow: null, multipleSessions: false, duplicateWindowSeconds: 60, maxSessionHours: 20, pinRequired: false, highSecurity: false, qr: { dynamic: true, static: false, refreshSeconds: 60, ttlSeconds: 75 }, ui: { instructions: 'Show your attendance QR code to the camera.', successSeconds: 4, errorSeconds: 4, screenDimSeconds: 120, fullScreen: true, cameraFacing: 'environment' } }; return json({ organization: {}, madrasa: {}, effective }) }
+    if (path === '/staff-attendance') return json({ from: todayISO(), to: todayISO(), total: 1, page: 1, pageSize: 200, items: [{ id: 's1', date: todayISO(), staff: { id: 'st1', code: 'm1', displayName: 'Qari Abdul Rahman Siddiqui', title: 'Mentor' }, shift: { id: 'sh1', name: 'Day' }, checkInAt: new Date().toISOString(), checkOutAt: null, status: 'OPEN', source: 'KIOSK', lateMinutes: 12, earlyMinutes: 0, workedMinutes: null, corrected: false }] })
+    if (path === '/staff-attendance/summary') return json({ month: todayISO().slice(0, 7), weeklyOff: 5, items: [{ staff: { id: 'st1', code: 'm1', displayName: 'Qari Abdul Rahman Siddiqui', title: 'Mentor' }, exempt: false, expectedDays: 5, presentDays: 4, absentDays: 1, lateCount: 1, lateMinutes: 12, earlyCount: 0, earlyMinutes: 0, workedMinutes: 1440, missedCheckouts: 0, openSessions: 0 }] })
+    if (path === '/staff-shifts') return json({ shifts: [{ id: 'sh1', name: 'Day', startTime: '08:00', endTime: '14:00', graceLateMinutes: 10, graceEarlyMinutes: 0, active: true, staffCount: 1 }], staff: [{ id: 'st1', code: 'm1', displayName: 'Qari Abdul Rahman Siddiqui', title: 'Mentor', hasAccount: true, attendanceExempt: false, shiftIds: ['sh1'] }] })
+    if (path === '/staff-attendance/me/qr') return json({ kind: 'dynamic', expiresAt: new Date(Date.now() + 75000).toISOString(), refreshSeconds: 60, qrDataUrl: 'data:image/png;base64,iVBORw0KGgo=', pin: { required: false, set: false }, staff: { displayName: p.displayName, code: 'm1' } })
+    if (path === '/staff-attendance/me') return json({ month: todayISO().slice(0, 7), items: [] })
     if (path === '/admin/users') return json({ total: 0, page: 1, pageSize: 100, items: [] })
     if (path === '/org/madrasas' && perms.includes('org.manage')) return json({ items: MADRASAS.map((m) => ({ ...m, active: true, students: 12, staff: 4, features: FEATURES })) })
     return json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404)

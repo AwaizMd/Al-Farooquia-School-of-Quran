@@ -19,11 +19,11 @@ export const TRACKS = {
 
 // Sabaq record categories. `tracks` lists which learning tracks normally use it.
 export const SABAQ_CATEGORIES = {
-  sabaq: { label: 'Hifz · Sabaq', short: 'Sabaq', hint: 'New lesson memorised today', tracks: ['hifz'], usesAyah: true },
-  sabqi: { label: 'Hifz · Sabqi', short: 'Sabqi', hint: 'Revision of recent lessons', tracks: ['hifz'], usesAyah: true },
-  manzil: { label: 'Manzil', short: 'Manzil', hint: 'Revision of older memorised portions', tracks: ['hifz', 'alim'], usesAyah: true },
-  nazira: { label: 'Nazira', short: 'Nazira', hint: 'Reading practice from the Mushaf', tracks: ['nazira', 'alim'], usesAyah: true },
-  qaida: { label: 'Noorani Qaida', short: 'Qaida', hint: 'Foundation lesson (letters & joining)', tracks: ['qaida'], usesAyah: false },
+  sabaq: { label: 'Hifz · Sabaq', short: 'Sabaq', hint: 'New lesson memorised today', tracks: ['hifz'], usesSafah: true },
+  sabqi: { label: 'Hifz · Sabqi', short: 'Sabqi', hint: 'Revision of recent lessons', tracks: ['hifz'], usesSafah: true },
+  manzil: { label: 'Manzil', short: 'Manzil', hint: 'Revision of older memorised portions', tracks: ['hifz', 'alim'], usesSafah: true },
+  nazira: { label: 'Nazira', short: 'Nazira', hint: 'Reading practice from the Mushaf', tracks: ['nazira', 'alim'], usesSafah: true },
+  qaida: { label: 'Noorani Qaida', short: 'Qaida', hint: 'Foundation lesson (letters & joining)', tracks: ['qaida'], usesSafah: false },
 }
 
 export const RATINGS = {

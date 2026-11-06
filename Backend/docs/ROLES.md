@@ -78,3 +78,15 @@ A switched-off module is refused by the API with `404 FEATURE_DISABLED`, not onl
 Defaults for a new madrasa:
 - **on:** Fees, Hostel, Examinations, Scheduled reports;
 - **off:** everything else.
+
+## Staff attendance and kiosks
+
+Needs the `STAFF_ATTENDANCE` module.
+
+| Permission | Who | Allows |
+|---|---|---|
+| `kiosks.manage` | Madrasa Admin, Super Admin | Register, deactivate and revoke kiosks; kiosk settings |
+| `staff_attendance.manage` | Madrasa Admin, Super Admin | Correct attendance with a reason, add it by hand, shifts, exemptions, cancel QR codes |
+| `staff_attendance.read` | Madrasa Admin, Super Admin, Principal, Accountant | See attendance and the monthly figures |
+
+Any signed-in person with a staff record in the madrasa can show their own QR code and see their own attendance. A kiosk is not a user and holds no role: its device cookie allows only its own device routes.
