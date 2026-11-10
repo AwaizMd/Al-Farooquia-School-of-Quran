@@ -3,12 +3,13 @@
   "private": true,
   "description": "Convenience scripts only. Frontend/ and Backend/ each have their own dependencies and lockfile.",
   "scripts": {
-    "install:all": "npm --prefix Frontend install && npm --prefix Backend install",
+    "install:all": "npm --prefix Frontend install && npm --prefix Backend install && npm --prefix public-website install",
     "dev:web": "npm --prefix Frontend run dev",
+    "dev:site": "npm --prefix public-website run dev",
     "dev:api": "npm --prefix Backend run dev",
     "dev:worker": "npm --prefix Backend run dev:worker",
     "db:start": "npm --prefix Backend run db:start",
-    "build": "npm --prefix Frontend run build && npm --prefix Backend run build",
-    "test": "npm --prefix Frontend test && npm --prefix Backend test"
+    "build": "npm --prefix Frontend run build && npm --prefix Backend run build && npm --prefix public-website run build",
+    "test": "npm --prefix Frontend test && npm --prefix Backend test && npm --prefix public-website test"
   }
 }

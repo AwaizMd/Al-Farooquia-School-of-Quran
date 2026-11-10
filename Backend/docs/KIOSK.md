@@ -64,7 +64,7 @@ There is no offline attendance. If the internet drops, the kiosk says *No intern
 
 ## Payroll
 
-**Salaries, deductions, leave and payroll are not built.** No business rules for them have been given. Staff Attendance → Monthly gives the figures payroll will need, per person and as CSV: expected, present and absent days, late and early counts and minutes, worked hours, and missed check-outs.
+**Payroll reads these figures: see `PAYROLL.md`. Leave is not built.** Staff Attendance → Monthly gives the figures payroll will need, per person and as CSV: expected, present and absent days, late and early counts and minutes, worked hours, and missed check-outs.
 
 Holidays and approved leave are not in the system yet, so **absent days are an upper limit**: a person on leave or on a holiday counts as absent.
 

@@ -2,8 +2,10 @@ import { CURRENCIES } from '../constants/config'
 
 export const money = (amount, currencyCode = 'INR') => {
   const c = CURRENCIES[currencyCode] || CURRENCIES.INR
-  const n = Math.round(Number(amount) || 0)
-  return `${c.symbol}${c.symbol.length > 1 ? ' ' : ''}${n.toLocaleString(c.locale)}`
+  // Paise only when there are any: rounding them away would make a summary stop adding up.
+  const n = Math.round((Number(amount) || 0) * 100) / 100
+  const digits = Number.isInteger(n) ? 0 : 2
+  return `${c.symbol}${c.symbol.length > 1 ? ' ' : ''}${n.toLocaleString(c.locale, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
 }
 
 export const compactMoney = (amount, currencyCode = 'INR') => {

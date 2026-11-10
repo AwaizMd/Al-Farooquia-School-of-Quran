@@ -1,7 +1,6 @@
 import {
   LayoutDashboard, Users, UserRound, CalendarCheck, BookOpenCheck, ClipboardList, Wallet, BellRing, BedDouble,
-  BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck, BadgeCheck, Landmark, Building2, QrCode, Smartphone, CalendarClock,
-} from 'lucide-react'
+  BarChart3, History, Settings, Sprout, FileText, ScrollText, Plus, ShieldCheck, BadgeCheck, Landmark, Building2, QrCode, Smartphone, CalendarClock, Banknote, ReceiptText, Inbox, Globe, HeartHandshake, Tent } from 'lucide-react'
 
 // Role-aware navigation for the madrasa the account is working in. Hiding a link is
 // only a convenience: the server enforces every permission and refuses modules a
@@ -9,6 +8,12 @@ import {
 // `perm` hides it without that permission.
 const ORG = { to: '/organization', label: 'Madrasas', icon: Building2, perm: 'org.manage' }
 const MY_QR = { to: '/my-attendance', label: 'My Attendance QR', icon: QrCode, feature: 'STAFF_ATTENDANCE', staffOnly: true }
+const PAYROLL = { to: '/payroll', label: 'Payroll', icon: Banknote, feature: 'PAYROLL' }
+const MY_PAYSLIPS = { to: '/my-payslips', label: 'My Payslips', icon: ReceiptText, feature: 'PAYROLL', staffOnly: true }
+const HALAQA = { to: '/halaqa', label: 'Halaqa Programs', icon: Tent, feature: 'HALAQA' }
+const MUREEDS = { to: '/mureeds', label: 'Mureed Directory', icon: HeartHandshake, feature: 'HALAQA' }
+const WEBSITE = { to: '/website', label: 'Public Website', icon: Globe, feature: 'PUBLIC_WEBSITE' }
+const APPLICATIONS = { to: '/applications', label: 'Applications', icon: Inbox, feature: 'PUBLIC_WEBSITE' }
 const STAFF_ATT = { to: '/staff-attendance', label: 'Staff Attendance', icon: CalendarClock, feature: 'STAFF_ATTENDANCE' }
 
 export const NAV = {
@@ -20,8 +25,11 @@ export const NAV = {
         { to: '/mentors', label: 'Mentors', icon: UserRound },
         STAFF_ATT,
         { to: '/kiosks', label: 'Attendance Kiosks', icon: Smartphone, feature: 'STAFF_ATTENDANCE' },
+        PAYROLL,
         MY_QR,
+        MY_PAYSLIPS,
       ] },
+      { title: 'Halaqas & Website', items: [HALAQA, WEBSITE] },
       { title: 'Learning', items: [
         { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
         { to: '/sabaq/new', label: 'Record Sabaq', icon: BookOpenCheck },
@@ -62,12 +70,14 @@ export const NAV = {
         { to: '/mentors', label: 'Mentors', icon: UserRound },
         STAFF_ATT,
         MY_QR,
+        MY_PAYSLIPS,
       ] },
       { title: 'Learning', items: [
         { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
         { to: '/sabaq', label: 'Sabaq Records', icon: ScrollText, end: true },
         { to: '/exams', label: 'Examinations', icon: ClipboardList, feature: 'ASSESSMENTS' },
       ] },
+      { title: 'Halaqas & Website', items: [HALAQA, MUREEDS, APPLICATIONS, WEBSITE] },
       { title: 'Insights', items: [
         { to: '/fees', label: 'Fees', icon: Wallet, feature: 'FEES' },
         { to: '/payment-verification', label: 'Payment Verification', icon: BadgeCheck, feature: 'FEES' },
@@ -91,7 +101,7 @@ export const NAV = {
         { to: '/payment-verification', label: 'Payment Verification', icon: BadgeCheck, feature: 'FEES' },
         { to: '/reminders', label: 'Fee Reminders', icon: BellRing, feature: 'FEES' },
       ] },
-      { title: 'People', items: [{ to: '/students', label: 'Students', icon: Users }, STAFF_ATT, MY_QR] },
+      { title: 'People', items: [{ to: '/students', label: 'Students', icon: Users }, STAFF_ATT, PAYROLL, MY_QR, MY_PAYSLIPS] },
     ],
     bottom: [
       { to: '/dashboard', label: 'Fees', icon: Wallet },
@@ -134,6 +144,7 @@ export const NAV = {
         { to: '/dashboard', label: 'Hostel', icon: BedDouble },
         { to: '/notifications', label: 'Notifications', icon: BellRing },
         MY_QR,
+        MY_PAYSLIPS,
       ] },
     ],
     bottom: [
@@ -153,7 +164,9 @@ export const NAV = {
       { title: 'Teaching', items: [
         { to: '/exams', label: 'Tests & Marks', icon: ClipboardList, feature: 'ASSESSMENTS' },
         { to: '/progress-report', label: 'Progress Reports', icon: FileText },
+        HALAQA,
         MY_QR,
+        MY_PAYSLIPS,
       ] },
     ],
     bottom: [
@@ -222,6 +235,12 @@ export const ROUTE_ROLES = {
   '/kiosks': ['admin'],
   '/staff-attendance': ['admin', 'principal', 'accountant'],
   '/my-attendance': ['admin', 'principal', 'accountant', 'mentor', 'warden'],
+  '/payroll': ['admin', 'accountant'],
+  '/halaqa': ['admin', 'principal', 'mentor'],
+  '/mureeds': ['principal'],
+  '/website': ['admin', 'principal'],
+  '/applications': ['principal'],
+  '/my-payslips': ['admin', 'principal', 'accountant', 'mentor', 'warden'],
   '/journey': ['student', 'parent'],
   '/progress-report': ['admin', 'principal', 'mentor', 'parent'],
   '/exams': ['admin', 'principal', 'mentor', 'student', 'parent'],
@@ -233,5 +252,5 @@ export const PAGE_TITLES = [
   ['/attendance', 'Attendance'], ['/sabaq/new', 'Record Sabaq'], ['/sabaq', 'Sabaq Records'], ['/journey', 'Learning'],
   ['/progress-report', 'Progress Report'], ['/exams', 'Examinations'], ['/report-card', 'Report Card'], ['/fees', 'Fees'],
   ['/reminders', 'Fee Reminders'], ['/payment-settings', 'Fee Payment Settings'], ['/payment-verification', 'Payment Verification'], ['/hostel', 'Hostel'], ['/reports', 'Reports'],
-  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/organization', 'Madrasas'], ['/kiosks', 'Attendance Kiosks'], ['/staff-attendance', 'Staff Attendance'], ['/my-attendance', 'My Attendance QR'], ['/account/security', 'Account security'],
+  ['/audit', 'Activity Log'], ['/notifications', 'Notifications'], ['/settings', 'Settings'], ['/admin/users', 'Users & Access'], ['/organization', 'Madrasas'], ['/kiosks', 'Attendance Kiosks'], ['/staff-attendance', 'Staff Attendance'], ['/my-attendance', 'My Attendance QR'], ['/payroll', 'Payroll'], ['/halaqa', 'Halaqa Programs'], ['/mureeds', 'Mureed Directory'], ['/website', 'Public Website'], ['/applications', 'Applications'], ['/my-payslips', 'My Payslips'], ['/account/security', 'Account security'],
 ]

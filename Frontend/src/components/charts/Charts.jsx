@@ -1,5 +1,5 @@
 import { t } from "../../i18n/I18nProvider"
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend, LineChart, Line, LabelList } from 'recharts'
 import { Card, CardHeader } from '../ui'
 import { money, compactMoney } from '../../utils/format'
 
@@ -37,7 +37,7 @@ export function ChartCard({ title, subtitle, action, children, legend, footer, h
       <CardHeader title={title} subtitle={subtitle} action={action} />
       {legend && <div className="mt-3"><LegendRow items={legend} /></div>}
       <div className="px-2 pb-3 pt-2 sm:px-3" style={{ height }}>{children}</div>
-      {footer && <div className="border-t border-line px-4 py-2.5 text-[12.5px] text-ink-muted sm:px-5">{footer}</div>}
+      {footer && <div className="mt-auto border-t border-line px-4 py-2.5 text-[12.5px] text-ink-muted sm:px-5">{footer}</div>}
     </Card>
   )
 }
@@ -48,7 +48,7 @@ export function AttendanceTrendChart({ data }) {
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barCategoryGap="22%">
         <CartesianGrid vertical={false} stroke={C.grid} />
-        <XAxis dataKey="label" {...axis} interval={0} />
+        <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={8} />
         <YAxis {...axis} allowDecimals={false} />
         <Tooltip content={<TipBox />} cursor={{ fill: 'rgba(14,128,96,0.06)' }} />
         <Bar dataKey="present" name={t("Present")} stackId="a" fill={C.green} stroke="#fff" strokeWidth={1} />
@@ -60,6 +60,87 @@ export function AttendanceTrendChart({ data }) {
   )
 }
 export const ATTENDANCE_LEGEND = [{ label: 'Present', color: C.green }, { label: 'Late', color: C.gold }, { label: 'Excused', color: C.blue }, { label: 'Absent', color: C.red }]
+
+/**
+ * One bar per week with its value printed on top, so nobody has to read an axis.
+ * data: [{ label, [dataKey]: number | null }]. A null week shows its date with no bar.
+ */
+/** Week start as two short lines (day, then month only where it changes), so eight weeks never overlap. */
+function WeekTick({ x, y, payload, index, data }) {
+  const d = new Date(`${data[index]?.from}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return null
+  const month = d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' })
+  const prev = index > 0 ? new Date(`${data[index - 1].from}T00:00:00Z`).getUTCMonth() : -1
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text dy={10} textAnchor="middle" fontSize={11} fill="#4B544E">{d.getUTCDate()}</text>
+      {(index === 0 || d.getUTCMonth() !== prev) && <text dy={23} textAnchor="middle" fontSize={10} fill="#8A918B">{month}</text>}
+    </g>
+  )
+}
+
+export function WeeklyBars({ data, dataKey, name, max, fmt = (v) => v, colorFor = () => C.green }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 22, right: 4, left: 4, bottom: 4 }} barCategoryGap="18%">
+        <CartesianGrid vertical={false} stroke={C.grid} />
+        <XAxis dataKey="label" {...axis} interval={0} height={36} tick={(p) => <WeekTick {...p} data={data} />} />
+        <YAxis hide domain={[0, max ?? 'auto']} />
+        <Tooltip content={<TipBox fmt={fmt} />} cursor={{ fill: 'rgba(14,128,96,0.06)' }} />
+        <Bar dataKey={dataKey} name={name} radius={[4, 4, 0, 0]} maxBarSize={34} isAnimationActive={false}>
+          {data.map((d, i) => <Cell key={i} fill={d[dataKey] == null ? 'transparent' : colorFor(d[dataKey])} />)}
+          <LabelList dataKey={dataKey} position="top" formatter={(v) => (v == null ? '' : fmt(v))} style={{ fontSize: 11, fontWeight: 700, fill: '#1F3B33' }} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+/** Totals as labelled horizontal bars: "New lesson ████ 9 safah". rows: [{ label, value, color }] */
+export function TotalsList({ rows, unit }) {
+  const top = Math.max(...rows.map((r) => r.value), 1)
+  return (
+    <ul className="space-y-1.5 px-4 pb-3 sm:px-5">
+      {rows.map((r) => (
+        <li key={r.label} className="grid grid-cols-[76px_1fr_auto] items-center gap-2 text-[12.5px]">
+          <span className="truncate text-ink-soft">{t(r.label)}</span>
+          <span className="h-2.5 rounded-full bg-ivory-100"><span className="block h-full rounded-full" style={{ width: `${Math.max(4, (r.value / top) * 100)}%`, background: r.color }} /></span>
+          <span className="font-semibold tabular text-forest">{r.value} {t(unit)}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Safah (or Qaida lessons) per week, stacked by lesson type. data: [{ label, sabaq, sabqi, ... }] */
+export function SabaqVolumeChart({ data, series }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barCategoryGap="22%">
+        <CartesianGrid vertical={false} stroke={C.grid} />
+        <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={8} />
+        <YAxis {...axis} allowDecimals />
+        <Tooltip content={<TipBox />} cursor={{ fill: 'rgba(14,128,96,0.06)' }} />
+        {series.map((s, i) => <Bar key={s.key} dataKey={s.key} name={s.label} stackId="a" fill={s.color} stroke="#fff" strokeWidth={1} radius={i === series.length - 1 ? [4, 4, 0, 0] : 0} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+/** Average lesson rating per week on the 1-5 scale; weeks with no rated lesson leave a gap. */
+export function RatingLine({ data }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 10, right: 12, left: -24, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke={C.grid} />
+        <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={8} />
+        <YAxis {...axis} domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} />
+        <Tooltip content={<TipBox fmt={(v) => `${v} / 5`} />} />
+        <Line type="monotone" dataKey="rating" name={t("Average rating")} stroke={C.green} strokeWidth={2} connectNulls={false} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
 
 export function AttendanceRateLine({ data }) {
   return (

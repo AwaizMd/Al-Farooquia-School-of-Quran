@@ -27,6 +27,10 @@ import { manualPaymentsRouter } from './modules/fees/manual.routes.js'
 import { orgRouter } from './modules/organization/org.routes.js'
 import { kioskAdminRouter, kioskDeviceRouter } from './modules/kiosk/kiosk.routes.js'
 import { staffAttendanceRouter } from './modules/staff-attendance/attendance.routes.js'
+import { payrollRouter } from './modules/payroll/payroll.routes.js'
+import { halaqaRouter } from './modules/halaqa/halaqa.routes.js'
+import { siteRouter } from './modules/site/site.routes.js'
+import { publicRouter } from './modules/site/public.routes.js'
 
 export function createApp() {
   const app = express()
@@ -56,7 +60,9 @@ export function createApp() {
       maxAge: 600,
     }),
   )
-  app.use(express.json({ limit: '100kb' }))
+  // The website's routes parse their own bodies, and only after its server has been identified.
+  const json = express.json({ limit: '100kb' })
+  app.use((req, res, next) => (req.path.startsWith('/api/v1/public/') ? next() : json(req, res, next)))
   app.use(cookieParser())
 
   const api = Router()
@@ -69,6 +75,8 @@ export function createApp() {
   api.use(rejectNulBytes)
   // Kiosks authenticate as devices, not people, so they come before the session middleware.
   api.use('/kiosk/device', kioskDeviceRouter)
+  // The public website authenticates as a site, and its hostname selects the madrasa.
+  api.use('/public', publicRouter)
   // Fully signed-in requests then run inside their active madrasa (src/tenancy).
   api.use(loadSession, csrfProtection, resolveMadrasa)
   // Modules a madrasa can switch off are refused by the API, not only hidden in the menu.
@@ -77,6 +85,9 @@ export function createApp() {
   api.use('/scheduled-reports', requireFeature('SCHEDULED_REPORTS'))
   api.use('/hostel', requireFeature('HOSTEL'))
   api.use(['/kiosks', '/kiosk-settings', '/staff-shifts', '/staff-attendance'], requireFeature('STAFF_ATTENDANCE'))
+  api.use('/payroll', requireFeature('PAYROLL'))
+  api.use(['/halaqa', '/mureeds'], requireFeature('HALAQA'))
+  api.use(['/site', '/applications'], requireFeature('PUBLIC_WEBSITE'))
   api.use('/auth', authRouter)
   api.use('/admin', adminRouter)
   api.use(peopleRouter)
@@ -91,6 +102,9 @@ export function createApp() {
   api.use(orgRouter)
   api.use(kioskAdminRouter)
   api.use(staffAttendanceRouter)
+  api.use(payrollRouter)
+  api.use(halaqaRouter)
+  api.use(siteRouter)
   app.use('/api/v1', api)
 
   if (env.API_DOCS_ENABLED) {

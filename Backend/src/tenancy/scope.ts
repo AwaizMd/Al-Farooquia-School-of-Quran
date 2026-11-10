@@ -9,6 +9,8 @@ import { tenant } from './context.js'
 export const ROOT_MODELS = new Set<string>([
   'Group', 'StaffProfile', 'Student', 'GradingScale', 'Exam', 'FeePlan', 'Receipt', 'ReceiptSequence', 'HostelRoom',
   'ReminderRule', 'MessageTemplate', 'ScheduledReportConfig', 'ReportRun', 'PaymentSettings', 'KioskDevice', 'StaffShift',
+  'PayrollConfig', 'PayComponent', 'PayrollRun',
+  'HalaqaCategory', 'Halaqa', 'HalaqaParticipant', 'MureedEntry', 'SiteSettings', 'SiteDomain', 'SiteItem', 'SiteAsset', 'Application', 'HalaqaMessage',
 ])
 /** Child tables: a database trigger copies "madrasaId" from the parent row (and rejects a mismatch). */
 export const CHILD_MODELS = new Set<string>([
@@ -16,6 +18,8 @@ export const CHILD_MODELS = new Set<string>([
   'LearningRecordRevision', 'GradeBand', 'ExamGroup', 'ExamSubject', 'ExamResult', 'ExamMark', 'Invoice', 'Payment', 'PaymentAllocation', 'FeeAdjustment',
   'Refund', 'RefundAllocation', 'Concession', 'HostelBed', 'BedAssignment', 'HostelRollEntry', 'ManualPaymentSubmission',
   'KioskScan', 'StaffShiftAssignment', 'StaffAttendanceSession', 'StaffAttendanceCorrection',
+  'StaffSalary', 'PayrollAdjustment', 'Payslip',
+  'HalaqaMembership', 'ParticipantEvent', 'HalaqaSession', 'SessionMaterial', 'HalaqaAttendance', 'HalaqaAttendanceCorrection', 'MureedPrivateNote', 'ApplicationDocument', 'ApplicationEvent',
 ])
 export const isScoped = (model: string) => ROOT_MODELS.has(model) || CHILD_MODELS.has(model)
 

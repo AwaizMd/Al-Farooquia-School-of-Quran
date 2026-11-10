@@ -48,6 +48,28 @@ export const PERMISSIONS = [
   'accounts.close_period',
   // Register, configure and monitor attendance kiosks.
   'kiosks.manage',
+  // See every salary and payslip of the madrasa.
+  'payroll.read',
+  // Set salaries and rules, and prepare a month's payroll.
+  'payroll.manage',
+  // Approve a prepared payroll and record that it was paid.
+  'payroll.approve',
+  // Halaqa programs, sessions and participants.
+  'halaqa.read',
+  'halaqa.manage',
+  // Mark attendance in the Halaqas this person teaches (row-level check in the service).
+  'halaqa.attendance',
+  // The Mureed directory and its records.
+  'mureeds.read',
+  'mureeds.manage',
+  // Private notes: every read is audited.
+  'mureeds.private_notes',
+  // Website content; publishing is separate from drafting.
+  'site.manage',
+  'site.publish',
+  // Public applications: Principal only, not even administrators.
+  'applications.read',
+  'applications.decide',
   // Everyone's attendance, shifts and monthly figures.
   'staff_attendance.read',
   // Correct attendance, manage shifts and exemptions, cancel QR codes.
@@ -63,19 +85,20 @@ const MADRASA_ADMIN: readonly Permission[] = [
   'staff.manage', 'groups.manage', 'concessions.manage', 'attendance.manage', 'attendance.correct', 'learning.manage', 'exams.manage', 'fees.read', 'fees.record',
   'fees.invoice', 'fees.adjust', 'fees.refund', 'fees.verify', 'payments.configure', 'hostel.read', 'hostel.manage', 'accounts.read', 'accounts.write',
   'accounts.export', 'accounts.close_period', 'analytics.read', 'analytics.students', 'kiosks.manage', 'staff_attendance.read', 'staff_attendance.manage',
+  'payroll.read', 'payroll.manage', 'payroll.approve', 'halaqa.read', 'halaqa.manage', 'site.manage',
 ]
 
 const GRANTS: Record<Role, readonly Permission[]> = {
   SUPER_ADMIN: ['org.manage', ...MADRASA_ADMIN],
   MADRASA_ADMIN,
   // Academic oversight with drill-down; sees fees and accounts as summaries only.
-  PRINCIPAL: ['users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students', 'staff_attendance.read'],
+  PRINCIPAL: ['halaqa.read', 'halaqa.manage', 'halaqa.attendance', 'mureeds.read', 'mureeds.manage', 'mureeds.private_notes', 'site.manage', 'site.publish', 'applications.read', 'applications.decide', 'users.read', 'audit.read', 'students.read', 'guardians.read', 'staff.read', 'attendance.correct', 'fees.read', 'hostel.read', 'analytics.read', 'analytics.students', 'staff_attendance.read'],
   // Read-only, aggregates; drill-down only where the madrasa allows it (committeeCanViewStudents).
   COMMITTEE_MEMBER: ['analytics.read'],
   // Read-only accounts and exports. Never writes.
   CA: ['fees.read', 'accounts.read', 'accounts.export'],
-  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'staff_attendance.read'],
-  MENTOR: [],
+  ACCOUNTANT: ['students.read', 'guardians.read', 'fees.read', 'fees.record', 'fees.invoice', 'fees.verify', 'accounts.read', 'accounts.write', 'accounts.export', 'accounts.close_period', 'staff_attendance.read', 'payroll.read', 'payroll.manage'],
+  MENTOR: ['halaqa.attendance', ],
   STUDENT: [],
   PARENT: [],
   WARDEN: ['hostel.read', 'hostel.manage'],

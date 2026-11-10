@@ -12,7 +12,7 @@ import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Notice, Page
 // checks org.manage on every call.
 const FEATURES = [
   ['FEES', 'Fees'], ['HOSTEL', 'Hostel'], ['ASSESSMENTS', 'Examinations'], ['SCHEDULED_REPORTS', 'Scheduled reports'],
-  ['NAMAZ_TRACKING', 'Namaz tracking'], ['ACCOUNTS', 'Accounts'], ['STAFF_ATTENDANCE', 'Staff attendance'], ['BIOMETRIC', 'Biometric'],
+  ['NAMAZ_TRACKING', 'Namaz tracking'], ['ACCOUNTS', 'Accounts'], ['STAFF_ATTENDANCE', 'Staff attendance'], ['PAYROLL', 'Payroll'], ['HALAQA', 'Halaqa programs'], ['PUBLIC_WEBSITE', 'Public website'], ['BIOMETRIC', 'Biometric'],
 ]
 // Switches for modules the system does not have yet: turning them on would change nothing, so they stay off.
 const NOT_BUILT = new Set(['NAMAZ_TRACKING', 'ACCOUNTS', 'BIOMETRIC'])

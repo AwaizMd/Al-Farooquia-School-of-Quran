@@ -3,6 +3,8 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import App from '../app/App'
 import { NAV } from '../constants/navigation'
 import { MADRASAS, PERSONAS, fakeFetch } from './fakeApi'
+import { money } from '../utils/format'
+import { onSessionLost, post } from '../api/client'
 
 afterEach(() => {
   cleanup()
@@ -45,6 +47,137 @@ describe.each(Object.keys(PERSONAS))('%s', (persona) => {
       expect(screen.queryByText('Not available for this role'), `${persona} ${item.to}`).toBeNull()
     }
     expect(errors.filter((e) => /Page error|Uncaught|is not a function|Cannot read/.test(e))).toEqual([])
+  })
+})
+
+describe('confirming a sensitive action', () => {
+  const answer = (code) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code, message: 'x' } }), { status: 401, headers: { 'Content-Type': 'application/json' } })))
+
+  it('a mistyped password keeps the person signed in; a really lost session does not', async () => {
+    const lost = vi.fn()
+    const stop = onSessionLost(lost)
+    answer('REAUTH_FAILED')
+    await expect(post('/auth/reauthenticate', { password: 'x' })).rejects.toMatchObject({ code: 'REAUTH_FAILED' })
+    expect(lost).not.toHaveBeenCalled()
+    answer('UNAUTHENTICATED')
+    await expect(post('/fees/payments', {})).rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+    expect(lost).toHaveBeenCalledOnce()
+    stop()
+  })
+})
+
+describe('Halaqa programs and the public website', () => {
+  it('the Principal gets applications and the Mureed directory', async () => {
+    await boot('principal', '/applications')
+    await screen.findByText('Seeker Person', {}, { timeout: 5000 })
+    expect(screen.getByText(/Visible only to you/)).toBeTruthy()
+    cleanup()
+    await boot('principal', '/mureeds')
+    await screen.findByText('Quiet Person', {}, { timeout: 5000 })
+  })
+
+  it('an administrator runs Halaqas and website content but never sees applications or Mureeds', async () => {
+    for (const path of ['/applications', '/mureeds']) {
+      cleanup()
+      await boot('admin', path)
+      await screen.findByText('Not available for this role', {}, { timeout: 5000 })
+      expect(screen.queryByText('Seeker Person')).toBeNull()
+    }
+    cleanup()
+    await boot('admin', '/halaqa')
+    await screen.findByText('Total Halaqas', {}, { timeout: 5000 })
+    expect(screen.queryByText('Mureeds')).toBeNull()
+    expect(screen.queryByRole('link', { name: /applications/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: /mureed directory/i })).toBeNull()
+  })
+
+  it('a mentor sees only sessions; parents get no page at all', async () => {
+    await boot('mentor', '/halaqa')
+    await screen.findByText('Halaqa Programs', { selector: 'h1' }, { timeout: 5000 })
+    expect(screen.queryByText('Total Halaqas')).toBeNull()
+    expect(screen.queryByRole('tab', { name: /participants/i })).toBeNull()
+    cleanup()
+    await boot('parent', '/halaqa')
+    await screen.findByText('Not available for this role', {}, { timeout: 5000 })
+  })
+})
+
+describe('payroll', () => {
+  const click = async (name) => { const b = await screen.findByRole('button', { name }, { timeout: 5000 }); await act(async () => { b.click() }) }
+
+  it('an administrator can open a draft, see who has no salary, and approve; every rule starts switched off', async () => {
+    await boot('admin', '/payroll')
+    await click(/2026-10/)
+    await screen.findByText(/Hafiz Imran/)
+    expect(screen.getByRole('button', { name: /^approve$/i })).toBeTruthy()
+    expect(screen.getByText(/absent days may be too high/i)).toBeTruthy()
+    cleanup()
+    await boot('admin', '/payroll')
+    const tab = await screen.findByRole('tab', { name: /^Rules$/ }, { timeout: 5000 })
+    await act(async () => { tab.click() })
+    await screen.findByText('Payroll rules')
+    expect(screen.getByLabelText(/each day absent/i).checked).toBe(false)
+    expect(screen.getByLabelText(/repeated lateness/i).checked).toBe(false)
+  })
+
+  it('an accountant prepares but is not offered approval', async () => {
+    await boot('accountant', '/payroll')
+    await click(/2026-10/)
+    await screen.findByRole('button', { name: /recalculate/i })
+    expect(screen.queryByRole('button', { name: /^approve$/i })).toBeNull()
+  })
+
+  it('roles without the permission do not get the page', async () => {
+    await boot('principal', '/payroll')
+    await waitFor(() => expect(document.querySelector('main')).toBeTruthy())
+    expect(screen.queryByText('Work out draft')).toBeNull()
+  })
+})
+
+describe('money corrections', () => {
+  it('shows paise only when there are any, so a summary always adds up', () => {
+    expect(money(1500)).toBe('₹1,500')
+    expect(money(1000.5)).toBe('₹1,000.50')
+    expect(money(4498.5 + 2991.5)).toBe('₹7,490')
+    expect(money(0.1 + 0.2)).toBe('₹0.30')
+  })
+
+  const profile = async (persona) => {
+    await boot(persona, '/students')
+    const code = PERSONAS[persona] && (await screen.findAllByRole('link', {}, { timeout: 5000 })).map((a) => a.getAttribute('href')).find((h) => /^\/students\/(?!new$)[^/]+$/.test(h || ''))
+    window.history.pushState({}, '', `${code}?tab=fees`)
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')) })
+    await screen.findByText('Corrections and refunds', {}, { timeout: 5000 })
+  }
+
+  it('an administrator can waive, void and refund, and sees the limit exact to the paisa', async () => {
+    await profile('admin')
+    expect(screen.getAllByRole('button', { name: /waive or correct/i })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /^void$/i })).toHaveLength(1) // only the invoice with no activity
+    expect(screen.getByText(/Hardship approved/)).toBeTruthy()
+    expect(screen.getByText(/Paid twice by mistake/)).toBeTruthy()
+    await act(async () => { screen.getAllByRole('button', { name: /waive or correct/i })[0].click() })
+    await screen.findByText(/Up to ₹1,000\.50/)
+  })
+
+  it('an accountant records payments but cannot waive, void or refund', async () => {
+    await profile('accountant')
+    expect(screen.getByRole('button', { name: /record payment/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /waive or correct/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^refund$/i })).toBeNull()
+    expect(screen.getByText(/Paid twice by mistake/)).toBeTruthy() // the history is still visible
+  })
+
+  it('who may issue invoices or collect money follows the permissions', async () => {
+    await boot('accountant', '/fees')
+    await screen.findByRole('button', { name: /issue invoices/i }, { timeout: 5000 })
+    expect(screen.getByRole('button', { name: /record payment/i })).toBeTruthy()
+    cleanup()
+    await boot('principal', '/fees')
+    await screen.findByText('Fee management', {}, { timeout: 5000 })
+    expect(screen.queryByRole('button', { name: /issue invoices/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /record payment/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^collect$/i })).toBeNull()
   })
 })
 

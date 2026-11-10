@@ -54,10 +54,14 @@ const schema = z.object({
     .transform((v) => v === 'true'),
   // 32+ random bytes (base64). Keys the HMAC used to store session, link and recovery-code hashes.
   TOKEN_HMAC_KEY: base64Key,
+  /** Shared with the Next.js website server only. Empty turns the public API off. */
+  PUBLIC_SITE_TOKEN: z.string().min(32).optional(),
   // Versioned AES-256 keys for TOTP secrets: "1:<base64 32 bytes>,2:<base64 32 bytes>".
   MFA_ENCRYPTION_KEYS: keyring,
   MFA_ACTIVE_KEY_VERSION: z.coerce.number().int().min(1),
   MFA_ISSUER: z.string().min(1).default('Al Farooquia MMS'),
+  /** Local development only: sign in with a password alone. Refused in production. */
+  DEV_DISABLE_MFA: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 
   // "file" writes emails to .local/outbox (development); "smtp" sends them.
   MAIL_TRANSPORT: z.enum(['file', 'smtp']).default('file'),
@@ -88,6 +92,7 @@ function load(): Env {
   if (env.NODE_ENV === 'production') {
     if (env.CORS_ORIGINS.length === 0) throw new Error('CORS_ORIGINS must be set in production')
     if (!env.COOKIE_SECURE) throw new Error('COOKIE_SECURE cannot be false in production')
+    if (env.DEV_DISABLE_MFA) throw new Error('DEV_DISABLE_MFA cannot be used in production')
     if (env.MAIL_TRANSPORT !== 'smtp' || !env.SMTP_URL) throw new Error('Production requires MAIL_TRANSPORT=smtp and SMTP_URL')
   }
   if (env.STORAGE_DRIVER === 's3' && !(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY)) {

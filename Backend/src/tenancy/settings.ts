@@ -40,10 +40,10 @@ export const MadrasaConfig = z
   .strict()
 export type MadrasaConfig = z.infer<typeof MadrasaConfig>
 
-export const FEATURES: readonly Feature[] = ['HOSTEL', 'FEES', 'ACCOUNTS', 'NAMAZ_TRACKING', 'STAFF_ATTENDANCE', 'ASSESSMENTS', 'SCHEDULED_REPORTS', 'BIOMETRIC']
+export const FEATURES: readonly Feature[] = ['HOSTEL', 'FEES', 'ACCOUNTS', 'NAMAZ_TRACKING', 'STAFF_ATTENDANCE', 'ASSESSMENTS', 'SCHEDULED_REPORTS', 'BIOMETRIC', 'PAYROLL', 'HALAQA', 'PUBLIC_WEBSITE']
 /** A madrasa with no row for a feature gets this. */
 export const FEATURE_DEFAULTS: Record<Feature, boolean> = {
-  HOSTEL: true, FEES: true, ACCOUNTS: false, NAMAZ_TRACKING: false, STAFF_ATTENDANCE: false, ASSESSMENTS: true, SCHEDULED_REPORTS: true, BIOMETRIC: false,
+  HOSTEL: true, FEES: true, ACCOUNTS: false, NAMAZ_TRACKING: false, STAFF_ATTENDANCE: false, ASSESSMENTS: true, SCHEDULED_REPORTS: true, BIOMETRIC: false, PAYROLL: false, HALAQA: false, PUBLIC_WEBSITE: false,
 }
 
 export interface MadrasaProfile {

@@ -9,13 +9,16 @@ import { AttendanceBadge, LearningBadge, FeeBadge } from '../../components/cards
 import { LearningTimeline } from '../../features/sabaq/SabaqViews'
 import AttendanceCalendar from '../../features/students/AttendanceCalendar'
 import { FeeSummary, InvoiceList, PaymentHistory, ReceiptModal, RecordPaymentModal } from '../../features/fees/FeeViews'
+import { FeeCorrections } from '../../features/fees/FeeCorrections'
+import { ChartCard, WeeklyBars, TotalsList, C } from '../../components/charts/Charts'
+import { useAuth } from '../../context/AuthContext'
 import { Forbidden, NotFound } from './Fallbacks'
 import {
   canSeeStudent, currentLevel, learningStatus, latestTarget, recordsFor, studentAttendance, studentFees, mentorOfStudent,
-  resultView, latestSchoolDay, hostelAlerts,
+  resultView, latestSchoolDay, hostelAlerts, studentWeekly
 } from '../../services/selectors'
 import { TRACKS, ATTENDANCE } from '../../constants/labels'
-import { fmtDate, ageFrom, addDays, fmtDay } from '../../utils/date'
+import { fmtDate, ageFrom, addDays, fmtDay, fmtShort } from '../../utils/date'
 import { money } from '../../utils/format'
 
 export default function StudentProfile() {
@@ -24,6 +27,7 @@ export default function StudentProfile() {
   const [tab, setTab] = useQueryState('tab', 'overview')
   const [receipt, setReceipt] = useState(null)
   const [pay, setPay] = useState(false)
+  const auth = useAuth()
   const st = idx.students[id]
   if (!st) return <NotFound />
   if (!canSeeStudent(state, idx, id)) return <Forbidden />
@@ -120,6 +124,7 @@ export default function StudentProfile() {
               {st.medical && <Row icon={HeartPulse} k="Medical" v={st.medical} />}
             </dl>
           </Card>
+          <ProgressCharts state={state} idx={idx} id={id} today={today} onOpen={setTab} />
           <Card className="lg:col-span-3">
             <CardHeader title={t("Recent learning")} action={<Button size="sm" variant="ghost" onClick={() => setTab('learning')}>{t("Full history")}</Button>} />
             <div className="p-4 sm:p-5"><LearningTimeline records={records.slice(0, 4)} limit={4} /></div>
@@ -181,13 +186,14 @@ export default function StudentProfile() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2"><span className="text-[13px] text-ink-muted">{t("Status")}</span><FeeBadge status={fees.status} /></div>
-            {state.session.persona === 'admin' && <Button icon={Receipt} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Record payment")}</Button>}
+            {auth.can('fees.record') && <Button icon={Receipt} onClick={() => setPay(true)} disabled={!fees.balance}>{t("Record payment")}</Button>}
           </div>
           <FeeSummary fees={fees} currency={cur} />
           <div className="grid gap-4 lg:grid-cols-2">
             <Card><CardHeader title={t("Invoices")} /><div className="mt-2"><InvoiceList invoices={fees.invoices} currency={cur} /></div></Card>
             <Card><CardHeader title={t("Payment history")} /><div className="mt-2"><PaymentHistory payments={fees.payments} currency={cur} onReceipt={setReceipt} /></div></Card>
           </div>
+          {auth.can('fees.read') && <FeeCorrections admissionNo={st.id} />}
         </div>
       )}
 
@@ -258,5 +264,49 @@ function Row({ icon: Icon, k, v }) {
       <dt className="w-28 shrink-0 text-ink-muted">{t(k)}</dt>
       <dd className="min-w-0 font-semibold text-forest">{v}</dd>
     </div>
+  )
+}
+
+// Last 8 weeks at a glance, each chart answering one plain question with the number on every bar.
+const TYPES = [
+  { key: 'sabaq', label: 'New lesson', color: C.green }, { key: 'sabqi', label: 'Sabqi', color: C.gold },
+  { key: 'manzil', label: 'Manzil', color: C.blue }, { key: 'nazira', label: 'Nazira', color: C.green }, { key: 'qaida', label: 'Qaida', color: C.green },
+]
+// Simple traffic-light colours; the subtitles say what each colour means.
+const attendanceColor = (v) => (v >= 90 ? C.green : v >= 75 ? C.gold : C.red)
+const ratingColor = (v) => (v >= 4 ? C.green : v >= 3 ? C.gold : C.red)
+const round1 = (n) => Math.round(n * 10) / 10
+
+function ProgressCharts({ state, idx, id, today, onOpen }) {
+  const weeks = studentWeekly(state, idx, id, today).map((w) => {
+    const marked = w.present + w.late + w.absent + w.excused
+    const covered = round1(w.sabaq + w.sabqi + w.manzil + w.nazira)
+    return { ...w, label: fmtShort(w.from), marked, attendance: marked ? Math.round(((w.present + w.late) / marked) * 100) : null, covered: covered || null, lessons: w.qaida || null }
+  })
+  const sum = (k) => weeks.reduce((a, w) => a + (w[k] ?? 0), 0)
+  const days = sum('marked')
+  const attended = sum('present') + sum('late')
+  const types = TYPES.filter((x) => sum(x.key) > 0).map((x) => ({ label: x.label, value: round1(sum(x.key)), color: x.color }))
+  const onlyQaida = types.length === 1 && types[0].label === 'Qaida'
+  const total = round1(sum('covered'))
+  const rated = weeks.filter((w) => w.rating !== null)
+  const avg = rated.length ? (rated.reduce((a, w) => a + w.rating, 0) / rated.length).toFixed(1) : null
+  const link = (to, text) => <button type="button" className="font-semibold text-primary-700" onClick={() => onOpen(to)}>{t(text)}</button>
+  const empty = (text) => <p className="flex h-full items-center justify-center px-4 text-center text-[13px] text-ink-muted">{text}</p>
+  return (
+    <>
+      <ChartCard title={t('Attendance')} subtitle={days ? t('Present on {a} of {b} days. Each bar is one week.', { a: attended, b: days }) : t('Last 8 weeks')}
+        legend={days ? [{ label: '90% or more', color: C.green }, { label: '75 to 89%', color: C.gold }, { label: 'Below 75%', color: C.red }] : null} footer={link('attendance', 'Full attendance')}>
+        {days ? <WeeklyBars data={weeks} dataKey="attendance" name={t('Present')} max={100} fmt={(v) => `${v}%`} colorFor={attendanceColor} /> : empty(t('No attendance marked in the last 8 weeks.'))}
+      </ChartCard>
+      <ChartCard title={t('Sabaq')} subtitle={onlyQaida ? t('Qaida lessons each week') : total ? t('{n} safah covered in 8 weeks. Each bar is one week.', { n: total }) : t('Safah per week')} height={190}
+        footer={<>{types.length > 0 && <div className="-mx-4 -mt-1 mb-2 sm:-mx-5"><TotalsList rows={types} unit={onlyQaida ? 'lessons' : 'safah'} /></div>}{link('learning', 'Full history')}</>}>
+        {types.length ? <WeeklyBars data={weeks} dataKey={onlyQaida ? 'lessons' : 'covered'} name={onlyQaida ? t('Lessons') : t('Safah')} /> : empty(t('No lessons recorded in the last 8 weeks.'))}
+      </ChartCard>
+      <ChartCard title={t('Lesson rating')} subtitle={avg ? t('Average {n} out of 5. 5 = Excellent, 1 = Weak.', { n: avg }) : t('5 = Excellent, 1 = Weak')}
+        legend={rated.length ? [{ label: '4 to 5 Good', color: C.green }, { label: '3 Fair', color: C.gold }, { label: 'Below 3 Weak', color: C.red }] : null} footer={link('learning', 'Sabaq records')}>
+        {rated.length ? <WeeklyBars data={weeks} dataKey="rating" name={t('Average rating')} max={5} colorFor={ratingColor} /> : empty(t('No rated lessons in the last 8 weeks.'))}
+      </ChartCard>
+    </>
   )
 }

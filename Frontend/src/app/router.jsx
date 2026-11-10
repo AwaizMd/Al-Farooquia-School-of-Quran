@@ -40,6 +40,12 @@ import Organization from '../pages/org/Organization'
 import Kiosks from '../pages/admin/Kiosks'
 import StaffAttendance from '../pages/admin/StaffAttendance'
 import MyAttendanceQr from '../pages/account/MyAttendanceQr'
+import Payroll from '../pages/admin/Payroll'
+import Halaqa from '../pages/halaqa/Halaqa'
+import Mureeds from '../pages/halaqa/Mureeds'
+import Website from '../pages/site/Website'
+import Applications from '../pages/site/Applications'
+import MyPayslips from '../pages/account/MyPayslips'
 
 const Loading = () => <div className="flex min-h-dvh items-center justify-center bg-ivory" aria-busy="true"><span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-r-transparent" /></div>
 
@@ -126,6 +132,12 @@ export default function AppRoutes() {
         <Route path="/kiosks" element={<Gate path="/kiosks" perm="kiosks.manage"><Kiosks /></Gate>} />
         <Route path="/staff-attendance" element={<Gate path="/staff-attendance" perm="staff_attendance.read"><StaffAttendance /></Gate>} />
         <Route path="/my-attendance" element={<Gate path="/my-attendance"><MyAttendanceQr /></Gate>} />
+        <Route path="/halaqa" element={<Gate path="/halaqa"><Halaqa /></Gate>} />
+        <Route path="/mureeds" element={<Gate path="/mureeds" perm="mureeds.read"><Mureeds /></Gate>} />
+        <Route path="/website" element={<Gate path="/website" perm="site.manage"><Website /></Gate>} />
+        <Route path="/applications" element={<Gate path="/applications" perm="applications.read"><Applications /></Gate>} />
+        <Route path="/payroll" element={<Gate path="/payroll" perm="payroll.read"><Payroll /></Gate>} />
+        <Route path="/my-payslips" element={<Gate path="/my-payslips"><MyPayslips /></Gate>} />
         <Route path="/organization" element={<Gate path="/organization" perm="org.manage"><Organization /></Gate>} />
         <Route path="/account/security" element={<Security />} />
         <Route path="*" element={<NotFound />} />

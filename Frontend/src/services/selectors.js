@@ -102,6 +102,33 @@ export function repeatedAbsences(state, idx, today = todayISO(), students = stat
 // ---------- Learning ----------
 export const recordsFor = (idx, sid) => idx.recordsByStudent[sid] || []
 
+/**
+ * One student's last few weeks, week by week (each week ends on today's weekday), for the
+ * overview charts: attendance days by status, safah covered per lesson type (lessons for
+ * Qaida, which is not counted in safah) and the average lesson rating.
+ */
+export function studentWeekly(state, idx, sid, today = todayISO(), weeks = 8) {
+  const start = addDays(today, -(weeks * 7 - 1))
+  const rows = Array.from({ length: weeks }, (_, i) => {
+    const from = addDays(start, i * 7)
+    return { from, to: addDays(from, 6), present: 0, late: 0, absent: 0, excused: 0, sabaq: 0, sabqi: 0, manzil: 0, nazira: 0, qaida: 0, ratingSum: 0, rated: 0 }
+  })
+  const weekOf = (date) => (date < start || date > today ? null : rows[Math.floor(diffDays(date, start) / 7)])
+  for (const date in state.attendance) {
+    const v = state.attendance[date][sid]
+    const w = v && weekOf(date)
+    if (w && v in w) w[v]++
+  }
+  for (const r of recordsFor(idx, sid)) {
+    const w = weekOf(r.date)
+    if (!w || !(r.category in w)) continue
+    // Safah is counted in half pages; Qaida (and any lesson recorded without safah) counts as one lesson.
+    w[r.category] += r.category === 'qaida' ? 1 : Number(r.safah) || 0
+    if (r.performance) { w.ratingSum += r.performance; w.rated++ }
+  }
+  return rows.map(({ ratingSum, rated, ...w }) => ({ ...w, rating: rated ? +(ratingSum / rated).toFixed(1) : null }))
+}
+
 export function learningStatus(idx, sid, today = todayISO()) {
   const recs = recordsFor(idx, sid).filter((r) => PRIMARY.has(r.category) && diffDays(today, r.date) <= 10).slice(0, 5)
   if (!recs.length) return { key: 'none', avg: null, recs }
@@ -143,7 +170,8 @@ export function sabaqToday(state, idx, students, today = todayISO()) {
 // ---------- Fees ----------
 export function invoiceView(idx, inv, today = todayISO()) {
   const paid = idx.paidByInvoice[inv.id] || 0
-  const balance = Math.max(0, inv.amount - paid)
+  // Rupee figures can carry paise; rounding keeps 0.1 + 0.2 style remainders from showing as a balance.
+  const balance = Math.max(0, Math.round((inv.amount - paid) * 100) / 100)
   let status = 'paid'
   if (balance > 0) status = inv.dueDate < today ? 'overdue' : paid > 0 ? 'partial' : 'due'
   if (balance > 0 && paid > 0 && inv.dueDate < today) status = 'overdue'
@@ -156,7 +184,7 @@ export function studentFees(state, idx, sid, today = todayISO()) {
   const payments = state.payments.filter((p) => p.studentId === sid).sort((a, b) => b.date.localeCompare(a.date))
   const total = invoices.reduce((a, i) => a + i.amount, 0)
   const paid = invoices.reduce((a, i) => a + i.paid, 0)
-  const balance = invoices.reduce((a, i) => a + i.balance, 0)
+  const balance = Math.round(invoices.reduce((a, i) => a + i.balance, 0) * 100) / 100
   const overdue = invoices.filter((i) => i.status === 'overdue').reduce((a, i) => a + i.balance, 0)
   const open = invoices.filter((i) => i.balance > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   const status = st?.concession?.percent >= 100 ? 'waived' : balance === 0 ? 'paid' : overdue > 0 ? 'overdue' : paid > 0 && open.some((i) => i.paid > 0) ? 'partial' : 'due'

@@ -1,0 +1,33 @@
+# Public website (Next.js). Install: copy to /etc/systemd/system/, then
+#   sudo systemctl daemon-reload && sudo systemctl enable --now madarsa-website
+# See Backend/docs/PUBLIC-WEBSITE.md.
+
+[Unit]
+Description=Al Farooquia public website
+After=network-online.target madarsa-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=madarsa
+Group=madarsa
+WorkingDirectory=/srv/madarsa/app/public-website/.next/standalone
+# Holds MMS_API_URL and PUBLIC_SITE_TOKEN. Readable by this service only.
+EnvironmentFile=/etc/madarsa/website-env
+Environment=PORT=3100
+Environment=HOSTNAME=127.0.0.1
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

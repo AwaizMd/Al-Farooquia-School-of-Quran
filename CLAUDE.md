@@ -10,6 +10,7 @@ it; the latest CR wins where they conflict.
 |---|---|
 | `Backend/` | Express 5 + TypeScript API and pg-boss worker, Prisma 7 (PostgreSQL 17), Zod 4, Vitest |
 | `Frontend/` | React 18 + Vite 7 + Tailwind 3 + Recharts SPA, talks only to `/api/v1` |
+| `public-website/` | Next.js public website (SEO). Separate app, **no database of its own**: reads and writes only through `/api/v1/public` |
 | `deploy/` | systemd units + Caddy. **No Docker** (owner's decision). |
 | `Backend/docs/` | Architecture, roles & permissions, payments, accounts, security, deployment |
 
@@ -93,11 +94,28 @@ MFA is mandatory for every staff and organization role (baseline cannot be lower
 
 Frontend (from `Frontend/`): `npm run dev` (:5173, proxies `/api`), `npm test`, `npm run build`.
 
+Public website (from `public-website/`): `npm run dev` (:3100), `npm test`, `npm run typecheck`, `npm run build`. Needs `.env.local` with `MMS_API_URL` and the same `PUBLIC_SITE_TOKEN` as the API.
+
 ## Staff attendance and kiosks
 
 - Android QR kiosk (a separate lightweight page, `Frontend/kiosk.html`) and staff attendance: `Backend/docs/KIOSK.md`.
 - A kiosk authenticates with its own device cookie; the madrasa always comes from the device record, never from the client. Attendance is recorded only by the server after verifying a signed QR code. There is no offline attendance.
-- **Payroll, salaries and leave are not built.** Attendance only provides the monthly figures; never calculate salary deductions in the kiosk or attendance code.
+- Attendance only provides the monthly figures; salary deductions are worked out only in `Backend/src/modules/payroll/`, never in the kiosk or attendance code.
+
+## Payroll
+
+- `Backend/docs/PAYROLL.md`. Behind the `PAYROLL` feature flag (off by default). **Every rule is configured per madrasa and starts switched off**; never hardcode an allowance, deduction, tax or statutory rate.
+- Approved payslips are immutable (database triggers); corrections are adjustments applied to a later month. Salary rows are append-only. Amounts never go in audit text.
+- The app moves no money and creates no bank files. **Leave is not built**: reviewers mark absent days as paid by hand.
+
+## Halaqa programs, Mureeds and the public website (CR-02)
+
+- Plan and status: `Backend/docs/CR-02-PLAN.md`; how it works: `Backend/docs/PUBLIC-WEBSITE.md`.
+- `Halaqa` programs are separate from the academic `Group` (shown as "Halqa"); Halaqa attendance is separate from student and staff attendance.
+- **Applications are Principal-only**: `applications.*` is granted to `PRINCIPAL` alone, not to Madrasa Admin or Super Admin. Never widen this without the owner.
+- **Private Mureed notes** need `mureeds.private_notes` (Principal alone); each read is audited and the text never enters the audit log.
+- **Public API** (`/api/v1/public`): needs the server-only `PUBLIC_SITE_TOKEN`. The madrasa comes only from the hostname through `SiteDomain`; never from anything the client sends. Build public responses field by field from published content.
+- Approval creates or links records; it never creates a login. Never add invented content or stock photographs to the website.
 
 ## Change requests
 

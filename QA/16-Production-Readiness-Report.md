@@ -9,6 +9,23 @@ The parts that exist are in good shape: nothing critical was found in them, and 
 **Environment:** Windows 11, Node 22, local PostgreSQL 17 (embedded). A separate database (`madarsa_audit`), API on port 4100, web on port 5174, headless Edge. Mail went to files. Demo data only.
 **Not touched:** production (none exists yet). Development data was not used for testing.
 
+## Update, 7 November 2026 (after this audit)
+
+The verdict stands: **NOT READY**. These changes came after the audit and have their own tests, but the full audit has not been rerun on them.
+
+| Item | Change |
+|---|---|
+| QA2-O01 no screens for money corrections | **Closed.** Waive, correct, void, refund and issue invoices now have screens. Tested through the real browser and API, including the password step. |
+| New defect QA3-01 (High) | A mistyped password when confirming a sensitive action signed the person out of the whole app. Fixed. |
+| New defect QA3-02 (High) | Accountants could not record payments on screen, although that is their job, while read-only roles were offered "Collect". Buttons now follow permissions. Fixed. |
+| New defect QA3-03 (High) | Voiding an invoice did not lock the student, so a payment at the same moment could land on a voided invoice. Fixed. |
+| New defect QA3-04 (Medium) | Amounts were rounded to whole rupees on screen, so summaries stopped adding up once paise existed. Fixed. |
+| Area 6, payroll correctness | **Now testable.** Payroll is built with rules the administrator configures (`Backend/docs/PAYROLL.md`): 20 API tests and a browser run passed. No real payroll has been checked against it, and it has no statutory calculations. Have your accountant check a sample month. |
+
+| Halaqa, Mureeds and public website (CR-02) | **New, built after this audit.** 52 API tests and a 49-check real-browser run passed on local servers. No outside security test, and never run on a real domain. Defects found and fixed while testing: uploads blocked by the API's size limit; the website's cache could keep showing unpublished content; a form saving nothing with its error out of view; a dropdown showing a category it had not selected. |
+
+Still open: deployment, HTTPS and real email (O04), backup restore (O03), real phone test (O06), startup download size (O08), Urdu on newer screens (O07, now also payroll).
+
 ## Assessment
 
 | # | Area | Result | Why |

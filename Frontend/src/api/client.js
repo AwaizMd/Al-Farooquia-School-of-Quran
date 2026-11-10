@@ -56,7 +56,8 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   if (!res.ok) {
     const e = data?.error || {}
     const error = new ApiError(res.status, e.code || 'HTTP_' + res.status, e.message || 'Something went wrong. Please try again.', e.details)
-    if (res.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/session')) listeners.forEach((fn) => fn(error))
+    // A mistyped password when confirming an action is not a lost session: the person stays signed in.
+    if (res.status === 401 && error.code !== 'REAUTH_FAILED' && !path.startsWith('/auth/login') && !path.startsWith('/auth/session')) listeners.forEach((fn) => fn(error))
     throw error
   }
   const token = data?.csrfToken ?? data?.session?.csrfToken

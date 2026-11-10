@@ -41,4 +41,6 @@ export const LIMITS = {
   reauthPerUser: { name: 'reauth:user', max: 10, windowSec: 15 * 60 },
   kioskScan: { name: 'kiosk:scan', max: 240, windowSec: 60 },
   attendancePin: { name: 'kiosk:pin', max: 5, windowSec: 15 * 60 },
+  publicSubmitPerIp: { name: 'public:submit', max: 10, windowSec: 60 * 60 },
+  publicLookupPerIp: { name: 'public:lookup', max: 20, windowSec: 15 * 60 },
 } satisfies Record<string, Limit>

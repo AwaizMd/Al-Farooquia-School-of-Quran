@@ -49,6 +49,7 @@ export function invoiceView(i: InvoiceRow, today: string) {
     id: i.id, number: i.number, studentId: i.studentId, admissionNo: i.student.admissionNo, period: i.period, plan: i.plan, currency: i.currency, status: i.status,
     grossMinor: i.grossMinor, discountMinor: i.discountMinor, amountMinor: i.amountMinor, adjustedMinor: adjusted, dueMinor: due, paidMinor: paid, balanceMinor: balance,
     issuedOn: isoDate(i.issuedOn), dueDate, overdue: balance > 0 && dueDate < today, adjustments: i.adjustments,
+    voidable: i.status !== 'VOID' && !i.allocations.length && !i.adjustments.length,
   }
 }
 
@@ -92,6 +93,7 @@ export const paymentView = (p: PaymentRow) => ({
     invoiceId: a.invoiceId, invoiceNumber: a.invoice.number, period: a.invoice.period, amountMinor: a.amountMinor,
     refundedMinor: p.refunds.filter((r) => r.status !== 'FAILED').flatMap((r) => r.allocations).filter((x) => x.invoiceId === a.invoiceId).reduce((t, x) => t + x.amountMinor, 0),
   })),
+  refundableMinor: p.amountMinor - p.refunds.filter((r) => r.status !== 'FAILED').reduce((t, r) => t + r.amountMinor, 0),
   refunds: p.refunds.map((r) => ({ id: r.id, amountMinor: r.amountMinor, reason: r.reason, status: r.status, createdAt: r.createdAt })),
 })
 
@@ -265,8 +267,11 @@ export async function adjustInvoice(req: Request, invoiceId: string, input: { am
 export async function voidInvoice(req: Request, invoiceId: string, reason: string) {
   const today = await institutionToday()
   return prisma.$transaction(async (tx) => {
-    const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, include: BALANCE_INCLUDE })
-    if (!inv) throw notFound()
+    const found = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { studentId: true } })
+    if (!found) throw notFound()
+    // Under the student lock, so a payment arriving at the same moment cannot land on a voided invoice.
+    await lockRow(tx, 'students', found.studentId)
+    const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: BALANCE_INCLUDE })
     if (inv.status === 'VOID') throw conflict('INVOICE_VOID', 'This invoice is already void.')
     if (inv.allocations.length || inv.adjustments.length) throw conflict('INVOICE_HAS_ACTIVITY', 'An invoice with payments or adjustments cannot be voided. Use an adjustment or refund.')
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'VOID', voidReason: reason } })

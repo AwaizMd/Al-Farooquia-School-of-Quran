@@ -2,7 +2,7 @@ import { Prisma } from '../generated/prisma/client.js'
 import type { Tx } from '../database/prisma.js'
 import { tenant } from './context.js'
 
-const LOCKABLE = { students: 'students', groups: 'groups', manual_payment_submissions: 'manual_payment_submissions', staff_profiles: 'staff_profiles' } as const
+const LOCKABLE = { students: 'students', groups: 'groups', manual_payment_submissions: 'manual_payment_submissions', staff_profiles: 'staff_profiles', payroll_runs: 'payroll_runs' } as const
 
 /**
  * Lock one row of a madrasa-scoped table for the rest of the transaction. Raw SQL

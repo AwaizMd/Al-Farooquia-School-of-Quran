@@ -517,6 +517,24 @@ const UR = {
   'Users & access': 'صارفین اور رسائی',
   'Could not load your records': 'آپ کا ریکارڈ لوڈ نہیں ہو سکا',
   'Try again': 'دوبارہ کوشش کریں',
+  // ---------- Student overview charts ----------
+  'Present on {a} of {b} days. Each bar is one week.': '{b} میں سے {a} دن حاضر۔ ہر بار ایک ہفتہ ہے۔', '90% or more': '90% یا زیادہ', '75 to 89%': '75 سے 89%', 'Below 75%': '75% سے کم',
+  'Qaida lessons each week': 'ہر ہفتے قاعدہ کے اسباق', '{n} safah covered in 8 weeks. Each bar is one week.': '8 ہفتوں میں {n} صفحات۔ ہر بار ایک ہفتہ ہے۔', 'New lesson': 'نیا سبق', 'lessons': 'اسباق', 'Lessons': 'اسباق', 'Safah': 'صفحات',
+  'Average {n} out of 5. 5 = Excellent, 1 = Weak.': 'اوسط 5 میں سے {n}۔ 5 = بہترین، 1 = کمزور۔', '5 = Excellent, 1 = Weak': '5 = بہترین، 1 = کمزور', '4 to 5 Good': '4 سے 5 اچھا', '3 Fair': '3 درمیانہ', 'Below 3 Weak': '3 سے کم کمزور',
+  'Last 8 weeks': 'پچھلے 8 ہفتے', 'Last 8 weeks · {n}% present': 'پچھلے 8 ہفتے · {n}% حاضری', 'Full attendance': 'مکمل حاضری', 'No attendance marked in the last 8 weeks.': 'پچھلے 8 ہفتوں میں کوئی حاضری درج نہیں ہوئی۔',
+  'Qaida lessons per week': 'ہر ہفتے قاعدہ کے اسباق', 'Safah per week': 'ہر ہفتے صفحات', 'Safah per week · {n} in 8 weeks': 'ہر ہفتے صفحات · 8 ہفتوں میں {n}', 'No lessons recorded in the last 8 weeks.': 'پچھلے 8 ہفتوں میں کوئی سبق درج نہیں ہوا۔',
+  'Lesson rating': 'سبق کی درجہ بندی', 'Weekly average · {n} / 5 overall': 'ہفتہ وار اوسط · مجموعی {n} / 5', 'Weekly average, 1 to 5': 'ہفتہ وار اوسط، 1 سے 5', 'Average rating': 'اوسط درجہ', 'No rated lessons in the last 8 weeks.': 'پچھلے 8 ہفتوں میں کوئی درجہ بندی شدہ سبق نہیں۔',
+  // ---------- Fee corrections ----------
+  'Corrections and refunds': 'درستگی اور واپسی', 'Nothing is erased: each change is kept with its reason and the name of who made it.': 'کچھ مٹایا نہیں جاتا: ہر تبدیلی وجہ اور کرنے والے کے نام کے ساتھ محفوظ رہتی ہے۔',
+  'Void': 'کالعدم', 'Billed': 'واجب', 'Waive or correct': 'معاف یا درست کریں', 'Waiver': 'معافی', 'Correction': 'درستگی', 'Left to refund': 'واپسی کے لیے باقی', 'Refund': 'واپسی',
+  'Waive or correct an amount': 'رقم معاف یا درست کریں', 'Void this invoice': 'یہ بل کالعدم کریں', 'Refund a payment': 'ادائیگی واپس کریں',
+  'Enter an amount greater than zero, with at most two decimal places.': 'صفر سے زیادہ رقم درج کریں، زیادہ سے زیادہ دو اعشاریہ تک۔', 'The amount cannot be more than {max}.': 'رقم {max} سے زیادہ نہیں ہو سکتی۔', 'Give a reason of at least {n} characters.': 'کم از کم {n} حروف میں وجہ لکھیں۔',
+  'Adjustment saved': 'درستگی محفوظ ہو گئی', 'Invoice voided': 'بل کالعدم ہو گیا', 'Refund recorded': 'واپسی درج ہو گئی', 'Void invoice': 'بل کالعدم کریں', 'Record refund': 'واپسی درج کریں', 'Save adjustment': 'درستگی محفوظ کریں',
+  'The invoice stays on record marked void and no longer counts towards the balance. This cannot be undone.': 'بل ریکارڈ میں کالعدم کے طور پر رہے گا اور بقایا میں شمار نہیں ہوگا۔ اسے واپس نہیں کیا جا سکتا۔',
+  'This records money already handed back by cash, cheque or bank transfer. The app does not send any money. Refunded amounts become due again on the invoice.': 'یہ نقد، چیک یا بینک ٹرانسفر سے واپس کی جا چکی رقم کا اندراج ہے۔ ایپ کوئی رقم نہیں بھیجتی۔ واپس کی گئی رقم بل پر دوبارہ واجب ہو جاتی ہے۔',
+  'Up to {max}': '{max} تک', 'Reason': 'وجہ', 'Kept permanently in the audit log.': 'آڈٹ لاگ میں مستقل محفوظ رہتی ہے۔',
+  'Choose a month.': 'مہینہ منتخب کریں۔', '{n} invoices issued': '{n} بل جاری ہوئے', 'No new invoices': 'کوئی نیا بل نہیں', '{n} students checked for {month}. Students already billed are skipped.': '{month} کے لیے {n} طلبہ دیکھے گئے۔ جن کا بل جاری ہو چکا وہ چھوڑ دیے گئے۔',
+  'Issue invoices': 'بل جاری کریں', 'For every active student with a fee plan': 'فیس منصوبے والے ہر فعال طالب علم کے لیے', 'Safe to repeat: nobody is billed twice for the same month.': 'دوبارہ چلانا محفوظ ہے: ایک مہینے کا بل کسی کو دو بار نہیں ملے گا۔',
 }
 
 export default UR

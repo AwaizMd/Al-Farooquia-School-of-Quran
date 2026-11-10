@@ -8,10 +8,11 @@ import { runReminders } from '../modules/notifications/reminders.service.js'
 import { tick } from '../modules/scheduled-reports/reports.service.js'
 import { closeStaleForMadrasa } from '../modules/staff-attendance/attendance.service.js'
 import { asOrg, withMadrasa } from '../tenancy/context.js'
+import { applyRetention } from '../modules/site/applications.service.js'
 import { madrasaProfile } from '../tenancy/settings.js'
 
 /** Run a job once per active madrasa, each inside its own madrasa context (CR-01 §1). */
-async function forEachMadrasa(fn: (madrasaId: string) => Promise<unknown>, needs?: 'FEES' | 'SCHEDULED_REPORTS' | 'STAFF_ATTENDANCE') {
+async function forEachMadrasa(fn: (madrasaId: string) => Promise<unknown>, needs?: 'FEES' | 'SCHEDULED_REPORTS' | 'STAFF_ATTENDANCE' | 'PUBLIC_WEBSITE') {
   const madrasas = await asOrg('job fan-out over active madrasas', () => prisma.madrasa.findMany({ where: { active: true }, select: { id: true, code: true } }))
   const out: Record<string, unknown> = {}
   for (const m of madrasas) {
@@ -40,6 +41,7 @@ export const JOBS: JobDef[] = [
     await prisma.qrTokenUse.deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 86_400_000) } } })
     return result
   } },
+  { name: 'applications-retention', cron: '40 2 * * *', description: 'Remove personal data of decided applications past the madrasa’s retention period', run: () => forEachMadrasa(() => applyRetention(), 'PUBLIC_WEBSITE') },
   { name: 'deliver-notifications', cron: '* * * * *', description: 'Send queued messages, with retries', run: () => asOrg('outbox delivery for every madrasa', () => deliverDue()) },
 ]
 

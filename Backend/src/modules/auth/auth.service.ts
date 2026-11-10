@@ -42,7 +42,7 @@ export async function sessionView(userId: string, stage: SessionStage, csrfToken
     prisma.student.findFirst({ where: { userId }, select: { id: true, admissionNo: true } }),
   ]))
   const links = { staff, guardian: u.guardianProfile, student }
-  const [enabled, required, codesLeft] = await Promise.all([mfa.activeCredential(u.id), mfa.isMfaRequired(access.allRoles), mfa.remainingRecoveryCodes(u.id)])
+  const [enabled, required, codesLeft] = env.DEV_DISABLE_MFA ? [null, false, 0] : await Promise.all([mfa.activeCredential(u.id), mfa.isMfaRequired(access.allRoles), mfa.remainingRecoveryCodes(u.id)])
   return {
     stage: STAGE_NAME[stage],
     csrfToken,
@@ -84,7 +84,8 @@ export async function login(req: Request, res: Response, identifier: string, pas
     throw new AppError(403, 'MFA_RECOVERY_REQUIRED', 'Your two-step verification was reset. Use the recovery link or ticket from the office to continue.')
   }
 
-  const [cred, required] = await Promise.all([mfa.activeCredential(user.id), mfa.isMfaRequired(roles)])
+  // DEV_DISABLE_MFA (development only): the password alone signs in.
+  const [cred, required] = env.DEV_DISABLE_MFA ? [null, false] : await Promise.all([mfa.activeCredential(user.id), mfa.isMfaRequired(roles)])
   const stage: SessionStage = cred ? 'PRE_MFA' : required ? 'MFA_ENROLLMENT' : 'FULL'
   await audit({ action: stage === 'FULL' ? 'auth.login' : 'auth.password_verified', summary: stage === 'FULL' ? 'Signed in' : 'Password verified; two-step verification pending', entityType: 'user', entityId: user.id, actor }, req)
   return startSession(req, res, user.id, stage, roles, { reauthenticated: stage === 'FULL' })
@@ -170,7 +171,7 @@ export async function reauthenticate(req: Request, password: string, code: strin
   const a = req.auth!
   await consume(LIMITS.reauthPerUser, a.user.id)
   const user = await prisma.user.findUniqueOrThrow({ where: { id: a.user.id } })
-  const cred = await mfa.activeCredential(user.id)
+  const cred = env.DEV_DISABLE_MFA ? null : await mfa.activeCredential(user.id)
   const ok = (await verifyPassword(user.passwordHash, password)) && (!cred || (code !== undefined && (await mfa.verifyCode(user.id, code))))
   if (!ok) {
     await audit({ action: 'auth.reauth_failed', summary: 'Failed confirmation for a sensitive action', entityType: 'user', entityId: user.id }, req)

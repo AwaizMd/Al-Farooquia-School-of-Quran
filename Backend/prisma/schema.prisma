@@ -83,6 +83,31 @@ model Madrasa {
   kioskDevices               KioskDevice[]
   kioskScans                 KioskScan[]
   staffShifts                StaffShift[]
+  payrollConfigs             PayrollConfig[]
+  payComponents              PayComponent[]
+  staffSalaries              StaffSalary[]
+  payrollAdjustments         PayrollAdjustment[]
+  payrollRuns                PayrollRun[]
+  payslips                   Payslip[]
+  halaqaCategories HalaqaCategory[]
+  halaqas Halaqa[]
+  halaqaParticipants HalaqaParticipant[]
+  halaqaMemberships HalaqaMembership[]
+  participantEvents ParticipantEvent[]
+  halaqaSessions HalaqaSession[]
+  sessionMaterials SessionMaterial[]
+  halaqaAttendance HalaqaAttendance[]
+  halaqaAttendanceCorrections HalaqaAttendanceCorrection[]
+  mureedEntries MureedEntry[]
+  mureedPrivateNotes MureedPrivateNote[]
+  halaqaMessages HalaqaMessage[]
+  siteSettings SiteSettings[]
+  siteDomains SiteDomain[]
+  siteItems SiteItem[]
+  siteAssets SiteAsset[]
+  applications Application[]
+  applicationDocuments ApplicationDocument[]
+  applicationEvents ApplicationEvent[]
   staffShiftAssignments      StaffShiftAssignment[]
   staffAttendanceSessions    StaffAttendanceSession[]
   staffAttendanceCorrections StaffAttendanceCorrection[]
@@ -155,6 +180,9 @@ enum Feature {
   ASSESSMENTS
   SCHEDULED_REPORTS
   BIOMETRIC
+  PAYROLL
+  HALAQA
+  PUBLIC_WEBSITE
 }
 
 model MadrasaFeature {
@@ -495,6 +523,10 @@ model StaffProfile {
   user               User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
   shiftAssignments   StaffShiftAssignment[]
   attendanceSessions StaffAttendanceSession[]
+  salaries           StaffSalary[]
+  payrollAdjustments PayrollAdjustment[]
+  payslips           Payslip[]
+  taughtHalaqas      Halaqa[]
 
   assignments     GroupMentorAssignment[]
   learningRecords LearningRecord[]
@@ -586,6 +618,9 @@ model Student {
   manualPayments  ManualPaymentSubmission[]
   bedAssignments  BedAssignment[]
   hostelRoll      HostelRollEntry[]
+
+  halaqaParticipant HalaqaParticipant?
+  applications      Application[]
 
   @@unique([madrasaId, admissionNo])
   @@index([groupId, status])
@@ -1760,4 +1795,624 @@ model StaffAttendanceCorrection {
 
   @@index([sessionId])
   @@map("staff_attendance_corrections")
+}
+
+// ---------- Payroll: every rule is configured per madrasa ----------
+
+enum PayComponentKind {
+  EARNING
+  DEDUCTION
+}
+
+enum PayComponentCalc {
+  FIXED
+  PERCENT_OF_BASIC
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+model PayrollConfig {
+  madrasaId String   @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa  @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payroll_configs_madrasa_id_fkey")
+  id        String   @id @default(uuid()) @db.Uuid
+  rules     Json     @default("{}")
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([madrasaId])
+  @@map("payroll_configs")
+}
+
+/// An earning or deduction the madrasa has defined.
+model PayComponent {
+  madrasaId    String           @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa          @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "pay_components_madrasa_id_fkey")
+  id           String           @id @default(uuid()) @db.Uuid
+  name         String
+  kind         PayComponentKind
+  calc         PayComponentCalc
+  /// Paise when FIXED; basis points when PERCENT_OF_BASIC (1050 = 10.5%).
+  value        Int
+  appliesToAll Boolean          @default(false)
+  active       Boolean          @default(true)
+  createdAt    DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([madrasaId, name])
+  @@map("pay_components")
+}
+
+/// One row per salary change. Rows are never edited, so history stays true.
+model StaffSalary {
+  madrasaId            String       @default(dbgenerated()) @db.Uuid
+  madrasa              Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "staff_salaries_madrasa_id_fkey")
+  id                   String       @id @default(uuid()) @db.Uuid
+  staffId              String       @db.Uuid
+  staff                StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  effectiveFrom        DateTime     @db.Date
+  basicMinor           Int
+  exemptFromDeductions Boolean      @default(false)
+  componentValues      Json         @default("[]")
+  note                 String?
+  createdById          String?      @db.Uuid
+  createdAt            DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@unique([staffId, effectiveFrom])
+  @@index([madrasaId])
+  @@map("staff_salaries")
+}
+
+/// Added to or taken from the next approved payroll: how approved months get corrected.
+model PayrollAdjustment {
+  madrasaId    String       @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payroll_adjustments_madrasa_id_fkey")
+  id           String       @id @default(uuid()) @db.Uuid
+  staffId      String       @db.Uuid
+  staff        StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  /// Positive pays more, negative pays less.
+  amountMinor  Int
+  reason       String
+  appliedRunId String?      @db.Uuid
+  appliedRun   PayrollRun?  @relation(fields: [appliedRunId], references: [id], onDelete: Restrict)
+  createdById  String?      @db.Uuid
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([madrasaId])
+  @@index([staffId])
+  @@index([appliedRunId])
+  @@map("payroll_adjustments")
+}
+
+model PayrollRun {
+  madrasaId    String              @default(dbgenerated()) @db.Uuid
+  madrasa      Madrasa             @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payroll_runs_madrasa_id_fkey")
+  id           String              @id @default(uuid()) @db.Uuid
+  month        String
+  status       PayrollRunStatus    @default(DRAFT)
+  /// The rules these figures were worked out with.
+  rules        Json
+  preparedById String?             @db.Uuid
+  approvedById String?             @db.Uuid
+  approvedAt   DateTime?           @db.Timestamptz(3)
+  paidOn       DateTime?           @db.Date
+  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
+  payslips     Payslip[]
+  adjustments  PayrollAdjustment[]
+
+  @@unique([madrasaId, month])
+  @@map("payroll_runs")
+}
+
+/// Names and figures are copied in, so an approved payslip never changes when a record does.
+model Payslip {
+  madrasaId       String       @default(dbgenerated()) @db.Uuid
+  madrasa         Madrasa      @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "payslips_madrasa_id_fkey")
+  id              String       @id @default(uuid()) @db.Uuid
+  runId           String       @db.Uuid
+  run             PayrollRun   @relation(fields: [runId], references: [id], onDelete: Restrict)
+  staffId         String       @db.Uuid
+  staff           StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  staffName       String
+  staffCode       String
+  title           String
+  basicMinor      Int
+  earningsMinor   Int
+  deductionsMinor Int
+  netMinor        Int
+  lines           Json
+  attendance      Json
+  paidLeaveDays   Int          @default(0) @db.SmallInt
+  note            String?
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@unique([runId, staffId])
+  @@index([madrasaId])
+  @@index([staffId])
+  @@map("payslips")
+}
+
+// ---------- CR-02: Halaqa programs (separate from the academic Group and its attendance) ----------
+
+enum HalaqaStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum HalaqaFrequency {
+  ONE_OFF
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  LEFT
+  TRANSFERRED
+}
+
+enum HalaqaSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum HalaqaAttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
+enum MureedEntryKind {
+  MEETING
+  FOLLOW_UP
+  COMMUNICATION
+}
+
+model HalaqaCategory {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_categories_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  name      String
+  active    Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  halaqas   Halaqa[]
+
+  @@unique([madrasaId, name])
+  @@map("halaqa_categories")
+}
+
+model Halaqa {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqas_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  name            String
+  description     String?
+  categoryId      String          @db.Uuid
+  category        HalaqaCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  purpose         String?
+  location        String?
+  teacherStaffId  String?         @db.Uuid
+  teacher         StaffProfile?   @relation(fields: [teacherStaffId], references: [id], onDelete: SetNull)
+  frequency       HalaqaFrequency @default(WEEKLY)
+  /// 0 = Sunday ... 6 = Saturday.
+  meetingDays     Int[]
+  startTime       String?
+  endTime         String?
+  startDate       DateTime?       @db.Date
+  endDate         DateTime?       @db.Date
+  maxParticipants Int?
+  status          HalaqaStatus    @default(PLANNED)
+  instructions    String?
+  attendanceRules Json            @default("{}")
+  /// Only a Halaqa explicitly marked public appears on the website, and only these fields.
+  isPublic        Boolean         @default(false)
+  publicName      String?
+  publicDescription String?
+  publicEligibility String?
+  registrationOpen Boolean        @default(false)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  memberships     HalaqaMembership[]
+  sessions        HalaqaSession[]
+  messages        HalaqaMessage[]
+  applications    Application[]
+
+  @@unique([madrasaId, name])
+  @@index([categoryId])
+  @@index([teacherStaffId])
+  @@map("halaqas")
+}
+
+/// One person. Linked to a student when they are one, so nobody is entered twice.
+model HalaqaParticipant {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_participants_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  studentId     String?           @unique @db.Uuid
+  student       Student?          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  fullName      String
+  phone         String?
+  /// Digits only, for matching duplicates.
+  phoneKey      String?
+  email         String?
+  address       String?
+  guardianName  String?
+  guardianPhone String?
+  dob           DateTime?         @db.Date
+  photoKey      String?
+  photoType     String?
+  status        ParticipantStatus @default(ACTIVE)
+  notes         String?
+  isMureed      Boolean           @default(false)
+  mureedSince   DateTime?         @db.Date
+  /// QR cards issued before this number no longer work.
+  qrVersion     Int               @default(1)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+  memberships   HalaqaMembership[]
+  events        ParticipantEvent[]
+  attendance    HalaqaAttendance[]
+  entries       MureedEntry[]
+  privateNotes  MureedPrivateNote[]
+  applications  Application[]
+
+  @@index([madrasaId, phoneKey])
+  @@index([madrasaId, email])
+  @@map("halaqa_participants")
+}
+
+model HalaqaMembership {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_memberships_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  halaqaId      String            @db.Uuid
+  halaqa        Halaqa            @relation(fields: [halaqaId], references: [id], onDelete: Restrict)
+  participantId String            @db.Uuid
+  participant   HalaqaParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  joinedOn      DateTime          @db.Date
+  leftOn        DateTime?         @db.Date
+  status        MembershipStatus  @default(ACTIVE)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([halaqaId])
+  @@index([participantId])
+  @@map("halaqa_memberships")
+}
+
+/// A participant's history. Append-only.
+model ParticipantEvent {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "participant_events_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  participantId String            @db.Uuid
+  participant   HalaqaParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  kind          String
+  summary       String
+  actorName     String?
+  at            DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([participantId, at])
+  @@map("participant_events")
+}
+
+model HalaqaSession {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_sessions_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  halaqaId        String              @db.Uuid
+  halaqa          Halaqa              @relation(fields: [halaqaId], references: [id], onDelete: Restrict)
+  date            DateTime            @db.Date
+  startTime       String?
+  endTime         String?
+  location        String?
+  status          HalaqaSessionStatus @default(SCHEDULED)
+  rescheduledFrom DateTime?           @db.Date
+  cancelReason    String?
+  topic           String?
+  description     String?
+  discussionNotes String?
+  followUp        String?
+  seriesId        String?             @db.Uuid
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+  materials       SessionMaterial[]
+  attendance      HalaqaAttendance[]
+
+  @@unique([halaqaId, date, startTime])
+  @@index([madrasaId, date])
+  @@map("halaqa_sessions")
+}
+
+model SessionMaterial {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "session_materials_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  sessionId   String        @db.Uuid
+  session     HalaqaSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  fileName    String
+  storageKey  String
+  contentType String
+  sizeBytes   Int
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@index([sessionId])
+  @@map("session_materials")
+}
+
+model HalaqaAttendance {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_attendance_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  sessionId     String                 @db.Uuid
+  session       HalaqaSession          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  participantId String                 @db.Uuid
+  participant   HalaqaParticipant      @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  status        HalaqaAttendanceStatus
+  source        String                 @default("MANUAL")
+  markedById    String?                @db.Uuid
+  createdAt     DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime               @updatedAt @db.Timestamptz(3)
+  corrections   HalaqaAttendanceCorrection[]
+
+  @@unique([sessionId, participantId])
+  @@index([participantId])
+  @@map("halaqa_attendance")
+}
+
+model HalaqaAttendanceCorrection {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_attendance_corrections_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  attendanceId String                 @db.Uuid
+  attendance   HalaqaAttendance       @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  fromStatus   HalaqaAttendanceStatus
+  toStatus     HalaqaAttendanceStatus
+  reason       String
+  correctedBy  String
+  at           DateTime               @default(now()) @db.Timestamptz(3)
+
+  @@index([attendanceId])
+  @@map("halaqa_attendance_corrections")
+}
+
+model MureedEntry {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "mureed_entries_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  participantId String            @db.Uuid
+  participant   HalaqaParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  kind          MureedEntryKind
+  date          DateTime          @db.Date
+  summary       String
+  dueDate       DateTime?         @db.Date
+  doneAt        DateTime?         @db.Timestamptz(3)
+  createdById   String?           @db.Uuid
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([participantId, date])
+  @@map("mureed_entries")
+}
+
+/// Readable only with mureeds.private_notes. Every read and change is audited.
+model MureedPrivateNote {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "mureed_private_notes_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  participantId String            @db.Uuid
+  participant   HalaqaParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  body          String
+  authorId      String?           @db.Uuid
+  authorName    String
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@index([participantId])
+  @@map("mureed_private_notes")
+}
+
+model HalaqaMessage {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "halaqa_messages_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  halaqaId       String?  @db.Uuid
+  halaqa         Halaqa?  @relation(fields: [halaqaId], references: [id], onDelete: Restrict)
+  kind           String
+  subject        String
+  body           String
+  recipientCount Int
+  emailCount     Int
+  inAppCount     Int
+  sentByName     String
+  sentAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([halaqaId])
+  @@map("halaqa_messages")
+}
+
+// ---------- CR-02: public website (content only; never operational records) ----------
+
+enum SiteItemType {
+  PAGE
+  PROGRAM
+  ANNOUNCEMENT
+  EVENT
+  FAQ
+}
+
+enum SiteItemStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ApplicationType {
+  ADMISSION
+  HALAQA
+  MUREED
+  EVENT
+  ENQUIRY
+}
+
+enum ApplicationStatus {
+  PENDING
+  INFO_REQUESTED
+  APPROVED
+  REJECTED
+  CLOSED
+}
+
+model SiteSettings {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "site_settings_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  /// Branding, contact details, forms and retention: validated by SiteConfig.
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([madrasaId])
+  @@map("site_settings")
+}
+
+/// Hostname to madrasa: the only thing that decides whose website is being served.
+model SiteDomain {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "site_domains_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  hostname  String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([madrasaId])
+  @@map("site_domains")
+}
+
+model SiteItem {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "site_items_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  type        SiteItemType
+  slug        String
+  title       String
+  summary     String?
+  body        String?
+  /// Type-specific fields (see the CMS schema), plus optional Arabic in data.ar.
+  data        Json           @default("{}")
+  category    String?
+  imageId     String?        @db.Uuid
+  image       SiteAsset?     @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  featured    Boolean        @default(false)
+  sortOrder   Int            @default(0)
+  status      SiteItemStatus @default(DRAFT)
+  publishAt   DateTime?      @db.Timestamptz(3)
+  expiresAt   DateTime?      @db.Timestamptz(3)
+  publishedAt DateTime?      @db.Timestamptz(3)
+  createdById String?        @db.Uuid
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+  applications Application[]
+
+  @@unique([madrasaId, type, slug])
+  @@index([madrasaId, type, status])
+  @@map("site_items")
+}
+
+/// Images uploaded for publication. Everything here is public by design; private files never are.
+model SiteAsset {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "site_assets_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  fileName    String
+  storageKey  String
+  contentType String
+  sizeBytes   Int
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  items       SiteItem[]
+
+  @@map("site_assets")
+}
+
+model Application {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "applications_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  /// Random, so references cannot be guessed or counted.
+  reference     String             @unique
+  type          ApplicationType
+  status        ApplicationStatus  @default(PENDING)
+  applicantName String
+  phone         String?
+  phoneKey      String?
+  email         String?
+  /// Validated answers to the form as it was when submitted.
+  answers       Json
+  consentAt     DateTime           @db.Timestamptz(3)
+  consentText   String
+  halaqaId      String?            @db.Uuid
+  halaqa        Halaqa?            @relation(fields: [halaqaId], references: [id], onDelete: SetNull)
+  siteItemId    String?            @db.Uuid
+  siteItem      SiteItem?          @relation(fields: [siteItemId], references: [id], onDelete: SetNull)
+  studentId     String?            @db.Uuid
+  student       Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  participantId String?            @db.Uuid
+  participant   HalaqaParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  /// Hash of the link token sent when more information is requested.
+  respondTokenHash String?
+  respondExpiresAt DateTime?       @db.Timestamptz(3)
+  decidedAt     DateTime?          @db.Timestamptz(3)
+  /// Personal data removed under the retention rule; the reference and history stay.
+  anonymisedAt  DateTime?          @db.Timestamptz(3)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(3)
+  documents     ApplicationDocument[]
+  events        ApplicationEvent[]
+
+  @@index([madrasaId, type, status])
+  @@index([madrasaId, phoneKey])
+  @@index([madrasaId, email])
+  @@map("applications")
+}
+
+model ApplicationDocument {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "application_documents_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  applicationId String      @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  label         String
+  fileName      String
+  storageKey    String
+  contentType   String
+  sizeBytes     Int
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([applicationId])
+  @@map("application_documents")
+}
+
+/// The review history. Append-only.
+model ApplicationEvent {
+  madrasaId String @default(dbgenerated()) @db.Uuid
+  madrasa   Madrasa @relation(fields: [madrasaId], references: [id], onDelete: Restrict, map: "application_events_madrasa_id_fkey")
+  id        String @id @default(uuid()) @db.Uuid
+  applicationId String      @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  kind          String
+  note          String?
+  actorName     String
+  at            DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([applicationId, at])
+  @@map("application_events")
 }

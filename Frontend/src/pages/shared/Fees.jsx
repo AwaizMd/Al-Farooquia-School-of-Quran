@@ -1,7 +1,9 @@
 import { t } from "../../i18n/I18nProvider"
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Receipt, Download, CreditCard, Wallet, AlertCircle, TrendingUp, Percent, BellRing } from 'lucide-react'
+import { Receipt, Download, CreditCard, Wallet, AlertCircle, TrendingUp, Percent, BellRing, FilePlus2 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { IssueInvoicesModal } from '../../features/fees/FeeCorrections'
 import { useStore } from '../../context/DemoStore'
 import { logEvent } from '../../api/audit'
 import { useActiveChild } from '../../hooks/useScope'
@@ -60,7 +62,9 @@ function MyFees() {
 
 function AdminFees() {
   const { state, idx, today, dispatch } = useStore()
+  const auth = useAuth()
   const cur = state.settings.currency
+  const [issue, setIssue] = useState(false)
   const [tab, setTab] = useQueryState('tab', 'dues')
   const [payOpen, setPayOpen] = useQueryState('pay')
   const [payFor, setPayFor] = useState('')
@@ -72,7 +76,7 @@ function AdminFees() {
   return (
     <div>
       <PageHeader title={t("Fee management")} subtitle={t("Plans, dues, collections and receipts")}
-        actions={<><Button variant="secondary" icon={BellRing} to="/reminders">{t("Reminders")}</Button>{state.session.persona === 'admin' && <Button icon={Receipt} onClick={() => openPay()}>{t("Record payment")}</Button>}</>} />
+        actions={<><Button variant="secondary" icon={BellRing} to="/reminders">{t("Reminders")}</Button>{auth.can('fees.invoice') && <Button variant="secondary" icon={FilePlus2} onClick={() => setIssue(true)}>{t("Issue invoices")}</Button>}{auth.can('fees.record') && <Button icon={Receipt} onClick={() => openPay()}>{t("Record payment")}</Button>}</>} />
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Stat label={t("Collected this month")} value={money(totals.collectedThisMonth, cur)} icon={TrendingUp} tone="green" />
         <Stat label={t("Billed this month")} value={money(totals.billedThisMonth, cur)} sub={t('{pct}% collected', { pct: pct(totals.collectedThisMonth, totals.billedThisMonth) })} icon={Wallet} tone="gold" />
@@ -85,12 +89,14 @@ function AdminFees() {
       {tab === 'plans' && <Plans />}
       <RecordPaymentModal open={payOpen === '1'} onClose={() => setPayOpen('')} studentId={payFor} />
       <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} />
+      <IssueInvoicesModal open={issue} onClose={() => setIssue(false)} />
     </div>
   )
 }
 
 function Dues({ onPay }) {
   const { state, idx, today, dispatch } = useStore()
+  const auth = useAuth()
   const cur = state.settings.currency
   const [q, setQ] = useQueryState('q')
   const [status, setStatus] = useQueryState('status')
@@ -126,7 +132,7 @@ function Dues({ onPay }) {
                 {f.overdue > 0 && <span className="block text-[11.5px] text-clay-600">{money(f.overdue, cur)} {t("overdue")}</span>}
               </span>
               <FeeBadge status={f.status} />
-              {f.balance > 0 && <Button size="sm" variant="soft" onClick={() => onPay(s.id)}>{t("Collect")}</Button>}
+              {f.balance > 0 && auth.can('fees.record') && <Button size="sm" variant="soft" onClick={() => onPay(s.id)}>{t("Collect")}</Button>}
             </li>
           ))}
         </ul>

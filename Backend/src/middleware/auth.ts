@@ -12,6 +12,10 @@ const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // The only routes that take a raw (non-JSON) body: file uploads, which still need the CSRF token.
 const RAW_UPLOADS: { method: string; path: RegExp; types: string[] }[] = [
   { method: 'POST', path: /^\/payments\/proofs$/, types: PROOF_UPLOAD_TYPES },
+  { method: 'PUT', path: /^\/halaqa\/participants\/[0-9a-f-]+\/photo$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
+  { method: 'POST', path: /^\/halaqa\/sessions\/[0-9a-f-]+\/materials$/, types: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] },
+  { method: 'POST', path: /^\/site\/assets$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
+  { method: 'PUT', path: /^\/site\/logo$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
   { method: 'PUT', path: /^\/admin\/payment-settings\/upi-qr$/, types: ['image/png', 'image/jpeg', 'image/webp'] },
 ]
 

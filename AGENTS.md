@@ -104,3 +104,5 @@ Frontend (from `Frontend/`): `npm run dev` (:5173, proxies `/api`), `npm test`, 
 - **CR-01** (multi-madrasa, courses & classes, holidays, namaz, Razorpay removal,
   accounts, analytics, parent graphs, new roles, library removal): plan and status in
   `Backend/docs/CR-01-PLAN.md`.
+
+`public-website/` is the separate Next.js public website: it has no database and reaches the system only through `/api/v1/public`. Public applications are Principal-only. See `CLAUDE.md` and `Backend/docs/PUBLIC-WEBSITE.md`.

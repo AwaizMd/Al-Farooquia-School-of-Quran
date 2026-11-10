@@ -137,6 +137,56 @@ describe('office payments', () => {
   })
 })
 
+describe('money corrections: what the screens rely on', () => {
+  beforeEach(async () => { await admin.post('/api/v1/fees/invoices/issue', { period }) })
+
+  it('says which invoices can be voided, and a void removes the invoice from the balance', async () => {
+    const before = await balanceOf(admin, 'S-2')
+    const inv = (await admin.get('/api/v1/fees/students/S-2')).body.invoices[0]
+    expect(inv.voidable).toBe(true)
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    const r = await admin.post(`/api/v1/fees/invoices/${inv.id}/void`, { reason: 'Issued by mistake' })
+    expect(r.body).toMatchObject({ status: 'VOID', voidable: false, balanceMinor: 0 })
+    expect(await balanceOf(admin, 'S-2')).toBe(before - inv.amountMinor)
+    expect((await admin.post(`/api/v1/fees/invoices/${inv.id}/void`, { reason: 'Issued by mistake' })).body.error.code).toBe('INVOICE_VOID')
+  })
+
+  it('an invoice with an adjustment can no longer be voided', async () => {
+    const inv = (await admin.get('/api/v1/fees/students/S-2')).body.invoices[0]
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    expect((await admin.post(`/api/v1/fees/invoices/${inv.id}/adjustments`, { amountMinor: 1000, kind: 'CORRECTION', reason: 'Wrong plan billed' })).body.voidable).toBe(false)
+  })
+
+  it('a payment and a void at the same moment never leave money on a voided invoice', async () => {
+    const inv = (await admin.get('/api/v1/fees/students/S-2')).body.invoices[0]
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    await Promise.all([
+      admin.post(`/api/v1/fees/invoices/${inv.id}/void`, { reason: 'Issued by mistake' }),
+      admin.post('/api/v1/fees/payments', { studentId: fx.students.bilal.id, amountMinor: 1000, method: 'CASH', invoiceIds: [inv.id] }),
+    ])
+    const after = (await admin.get('/api/v1/fees/students/S-2')).body.invoices.find((i: { id: string }) => i.id === inv.id)
+    expect(after.status === 'VOID' && after.paidMinor > 0).toBe(false)
+  })
+
+  it('shows what is left to refund after earlier refunds', async () => {
+    const p = (await admin.post('/api/v1/fees/payments', { studentId: fx.students.bilal.id, amountMinor: 40000, method: 'CASH' })).body
+    expect(p.refundableMinor).toBe(40000)
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    await admin.post(`/api/v1/fees/payments/${p.id}/refunds`, { amountMinor: 15000, reason: 'Paid twice by mistake' })
+    const listed = (await admin.get('/api/v1/fees/students/S-2')).body.payments.find((x: { id: string }) => x.id === p.id)
+    expect(listed.refundableMinor).toBe(25000)
+    expect(listed.refunds[0]).toMatchObject({ amountMinor: 15000, reason: 'Paid twice by mistake' })
+  })
+
+  it('every correction is written to the audit log', async () => {
+    const inv = (await admin.get('/api/v1/fees/students/S-2')).body.invoices[0]
+    await admin.post('/api/v1/auth/reauthenticate', { password: PASSWORD })
+    await admin.post(`/api/v1/fees/invoices/${inv.id}/adjustments`, { amountMinor: 1000, kind: 'WAIVER', reason: 'Hardship approved' })
+    const logged = (await admin.get('/api/v1/admin/audit-logs?pageSize=20')).body.items.map((x: { action: string }) => x.action)
+    expect(logged).toContain('fees.invoice_adjusted')
+  })
+})
+
 describe('who can see and record fees', () => {
   beforeEach(async () => { await admin.post('/api/v1/fees/invoices/issue', { period }) })
 
